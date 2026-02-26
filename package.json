@@ -1,0 +1,12 @@
+{
+  "name": "anything-report",
+  "version": "1.0.0",
+  "description": "Lightweight ADO query → PowerPoint-style slide deck",
+  "main": "server.js",
+  "scripts": {
+    "start": "node server.js"
+  },
+  "dependencies": {
+    "express": "^4.18.2"
+  }
+}

@@ -1,0 +1,303 @@
+/* ── Anything Report — styles ─────────────────────────────────── */
+
+*, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+
+:root {
+    --bg:       #1e1e2e;
+    --surface:  #16213e;
+    --accent:   #0078d4;
+    --text:     #333;
+    --slide-bg: #ffffff;
+}
+
+html, body { height: 100%; overflow: hidden; }
+
+body {
+    font-family: 'Segoe UI', system-ui, -apple-system, sans-serif;
+    background: var(--bg);
+    color: var(--text);
+    display: flex;
+    flex-direction: column;
+}
+
+/* ── Header / toolbar ─────────────────────────────────────────── */
+
+header {
+    background: var(--surface);
+    padding: 10px 24px;
+    display: flex;
+    align-items: center;
+    gap: 16px;
+    flex-shrink: 0;
+    z-index: 10;
+}
+
+.logo {
+    color: #fff;
+    font-weight: 700;
+    font-size: 15px;
+    white-space: nowrap;
+    letter-spacing: 0.3px;
+}
+
+header form {
+    display: flex;
+    flex: 1;
+    gap: 8px;
+}
+
+header input {
+    padding: 8px 14px;
+    border: 1px solid #334;
+    border-radius: 6px;
+    background: #0d1b2a;
+    color: #ccc;
+    font-size: 14px;
+    outline: none;
+    transition: border-color 0.15s;
+}
+header input[type="text"] { flex: 1; }
+header input[type="date"] {
+    width: 160px;
+    flex-shrink: 0;
+    color-scheme: dark;
+}
+header input:focus { border-color: var(--accent); }
+
+header button {
+    padding: 8px 22px;
+    background: var(--accent);
+    color: #fff;
+    border: none;
+    border-radius: 6px;
+    font-weight: 600;
+    cursor: pointer;
+    font-size: 14px;
+    white-space: nowrap;
+    transition: background 0.15s;
+}
+header button:hover  { background: #106ebe; }
+header button:disabled { opacity: 0.5; cursor: wait; }
+
+/* ── Slide deck container ─────────────────────────────────────── */
+
+main {
+    flex: 1;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    padding: 20px 24px;
+    overflow: hidden;
+    position: relative;
+}
+
+/* ── Individual slide ─────────────────────────────────────────── */
+
+.slide {
+    display: none;
+    flex-direction: column;
+    width: min(94vw, 1200px);
+    max-height: calc(100vh - 130px);
+    background: var(--slide-bg);
+    border-radius: 10px;
+    box-shadow: 0 12px 48px rgba(0, 0, 0, 0.35);
+    padding: 40px 48px 32px;
+    overflow: hidden;
+}
+.slide.active { display: flex; }
+
+.slide h2 {
+    font-size: 24px;
+    font-weight: 700;
+    color: #1a1a2e;
+    border-left: 5px solid var(--accent);
+    padding-left: 16px;
+    margin-bottom: 24px;
+    flex-shrink: 0;
+    line-height: 1.3;
+}
+
+/* ── Table ─────────────────────────────────────────────────────── */
+
+.table-wrap {
+    flex: 1;
+    overflow-y: auto;
+    border-radius: 8px;
+    border: 1px solid #e0e0e0;
+}
+
+table {
+    width: 100%;
+    border-collapse: collapse;
+    font-size: 14px;
+}
+
+thead {
+    position: sticky;
+    top: 0;
+    z-index: 1;
+}
+
+th {
+    background: var(--surface);
+    color: #fff;
+    padding: 11px 16px;
+    text-align: left;
+    font-weight: 600;
+    font-size: 12px;
+    text-transform: uppercase;
+    letter-spacing: 0.6px;
+}
+
+td {
+    padding: 10px 16px;
+    border-bottom: 1px solid #eee;
+    vertical-align: top;
+}
+
+tr:nth-child(even) td { background: #f8f9fb; }
+tr:hover td           { background: #eef2f7; }
+
+td a {
+    color: var(--accent);
+    text-decoration: none;
+    font-weight: 600;
+    font-variant-numeric: tabular-nums;
+}
+td a:hover { text-decoration: underline; }
+
+.details {
+    max-width: 420px;
+    font-size: 13px;
+    color: #555;
+    line-height: 1.5;
+}
+
+.no-items {
+    padding: 32px;
+    text-align: center;
+    color: #999;
+    font-style: italic;
+}
+
+/* ── Risk badges ──────────────────────────────────────────────── */
+
+.risk {
+    display: inline-flex;
+    align-items: center;
+    gap: 6px;
+    padding: 4px 12px;
+    border-radius: 20px;
+    font-size: 13px;
+    font-weight: 600;
+    white-space: nowrap;
+}
+
+.on-track  { background: #e6f4ea; color: #1a7f37; }
+.at-risk   { background: #fff3e0; color: #bf5600; }
+.off-track { background: #fde8e8; color: #d1242f; }
+.unknown   { background: #f0f0f0; color: #999; }
+
+/* ── Top of Mind editable area ────────────────────────────────── */
+
+.editable {
+    flex: 1;
+    padding: 24px 28px;
+    border: 2px dashed #ccc;
+    border-radius: 8px;
+    font-size: 18px;
+    line-height: 1.9;
+    outline: none;
+    overflow-y: auto;
+    min-height: 180px;
+    color: #333;
+    transition: border-color 0.15s;
+}
+.editable:focus { border-color: var(--accent); }
+
+.editable:empty::before {
+    content: attr(placeholder);
+    color: #aaa;
+    pointer-events: none;
+}
+
+.editable ul, .editable ol {
+    margin-left: 20px;
+}
+
+/* ── Bottom navigation bar ────────────────────────────────────── */
+
+nav {
+    background: var(--surface);
+    padding: 10px 24px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    gap: 20px;
+    flex-shrink: 0;
+}
+
+nav button {
+    background: transparent;
+    border: 1px solid var(--accent);
+    color: var(--accent);
+    width: 34px;
+    height: 34px;
+    border-radius: 50%;
+    cursor: pointer;
+    font-size: 13px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    transition: all 0.15s;
+}
+nav button:hover { background: var(--accent); color: #fff; }
+
+nav span {
+    color: #8899aa;
+    font-size: 14px;
+    font-variant-numeric: tabular-nums;
+    min-width: 60px;
+    text-align: center;
+}
+
+/* ── Empty / welcome state ────────────────────────────────────── */
+
+#empty {
+    position: absolute;
+    inset: 0;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    color: #667;
+    font-size: 17px;
+    pointer-events: none;
+    text-align: center;
+    padding: 24px;
+    line-height: 1.6;
+}
+#empty[hidden] { display: none; }
+
+/* ── Loading overlay ──────────────────────────────────────────── */
+
+#loading {
+    position: absolute;
+    inset: 0;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    background: rgba(30, 30, 46, 0.85);
+    z-index: 20;
+}
+#loading[hidden] { display: none; }
+
+.spinner {
+    width: 40px;
+    height: 40px;
+    border: 4px solid #334;
+    border-top-color: var(--accent);
+    border-radius: 50%;
+    animation: spin 0.7s linear infinite;
+}
+
+@keyframes spin { to { transform: rotate(360deg); } }

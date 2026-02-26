@@ -1,0 +1,204 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Anything Report</title>
+    <link rel="stylesheet" href="styles.css">
+</head>
+<body>
+
+    <!-- ── Toolbar ─────────────────────────────────────────────── -->
+    <header>
+        <span class="logo">Anything Report</span>
+        <form id="configForm">
+            <input type="text" id="queryUrl"
+                   placeholder="Paste ADO query URL…" required>
+            <input type="date" id="midpointDate"
+                   title="Midpoint date (optional) — snapshot risk fields from this date">
+            <button type="submit" id="runBtn">&#9654; Run</button>
+        </form>
+    </header>
+
+    <!-- ── Slide deck ──────────────────────────────────────────── -->
+    <main id="deck">
+        <div id="empty">
+            Paste an Azure DevOps query URL above and click
+            <strong>Run</strong> to generate your report.
+        </div>
+        <div id="loading" hidden><div class="spinner"></div></div>
+    </main>
+
+    <!-- ── Navigation ──────────────────────────────────────────── -->
+    <nav id="slideNav" hidden>
+        <button id="prev" title="Previous (←)">&#9664;</button>
+        <span id="counter"></span>
+        <button id="next" title="Next (→)">&#9654;</button>
+    </nav>
+
+    <script>
+        /* ── State ──────────────────────────────────────────────── */
+        let total   = 0;
+        let current = 0;
+        let linkBase = '';
+        let hasMidpoint = false;
+
+        const $deck    = document.getElementById('deck');
+        const $nav     = document.getElementById('slideNav');
+        const $counter = document.getElementById('counter');
+        const $empty   = document.getElementById('empty');
+        const $loading = document.getElementById('loading');
+        const $query   = document.getElementById('queryUrl');
+        const $midDate = document.getElementById('midpointDate');
+        const $run     = document.getElementById('runBtn');
+
+        /* Restore saved inputs */
+        $query.value   = localStorage.getItem('ar_query') || '';
+        $midDate.value = localStorage.getItem('ar_middate') || '';
+
+        /* ── Navigation ─────────────────────────────────────────── */
+        function show(i) {
+            current = Math.max(0, Math.min(i, total - 1));
+            $deck.querySelectorAll('.slide').forEach(
+                (s, idx) => s.classList.toggle('active', idx === current)
+            );
+            $counter.textContent = (current + 1) + ' / ' + total;
+        }
+
+        document.getElementById('prev').onclick = () => show(current - 1);
+        document.getElementById('next').onclick = () => show(current + 1);
+        document.addEventListener('keydown', e => {
+            if (e.target.closest('.editable')) return;   /* don't hijack typing */
+            if (e.key === 'ArrowLeft')  show(current - 1);
+            if (e.key === 'ArrowRight') show(current + 1);
+        });
+
+        /* ── Risk badge (pure string) ───────────────────────────── */
+        function badge(risk) {
+            var r = (risk || '').toLowerCase();
+            if (r.includes('on track'))  return '<span class="risk on-track">&#10004; On Track</span>';
+            if (r.includes('at risk'))   return '<span class="risk at-risk">&#9888; At Risk</span>';
+            if (r.includes('off track')) return '<span class="risk off-track">&#10008; Off Track</span>';
+            return '<span class="risk unknown">&mdash;</span>';
+        }
+
+        /* ── Render slides ──────────────────────────────────────── */
+        function render(slides) {
+            /* Preserve Top-of-Mind content */
+            var tom = $deck.querySelector('#tom');
+            var savedTom = tom ? tom.innerHTML : (localStorage.getItem('ar_tom') || '');
+
+            /* Remove old slides (keep #loading) */
+            $deck.querySelectorAll('.slide').forEach(s => s.remove());
+
+            /* Slide 0: Top of Mind */
+            var topSlide = document.createElement('div');
+            topSlide.className = 'slide active';
+            topSlide.innerHTML =
+                '<h2>Top of Mind</h2>' +
+                '<div id="tom" class="editable" contenteditable="true" ' +
+                'placeholder="Click here to type your top-of-mind items…">' +
+                savedTom + '</div>';
+            $deck.prepend(topSlide);
+
+            /* Persist edits */
+            topSlide.querySelector('#tom').addEventListener('input', function () {
+                localStorage.setItem('ar_tom', this.innerHTML);
+            });
+
+            /* Data slides */
+            var colCount = hasMidpoint ? 6 : 4;
+
+            for (var s = 0; s < slides.length; s++) {
+                var slide = slides[s];
+                var div = document.createElement('div');
+                div.className = 'slide';
+
+                var rows = '';
+                if (slide.items.length === 0) {
+                    rows = '<tr><td colspan="' + colCount + '" class="no-items">No child epics</td></tr>';
+                } else {
+                    for (var i = 0; i < slide.items.length; i++) {
+                        var it = slide.items[i];
+                        rows += '<tr>';
+                        rows += '<td><a href="' + linkBase + it.id + '" target="_blank">' + it.id + '</a></td>';
+                        rows += '<td>' + it.title + '</td>';
+
+                        if (hasMidpoint) {
+                            rows += '<td>' + badge(it.midpointRisk) + '</td>';
+                            rows += '<td class="details">' + (it.midpointComment || '&mdash;') + '</td>';
+                            rows += '<td>' + badge(it.risk) + '</td>';
+                            rows += '<td class="details">' + (it.riskComment || '&mdash;') + '</td>';
+                        } else {
+                            rows += '<td>' + badge(it.risk) + '</td>';
+                            rows += '<td class="details">' + (it.riskComment || '&mdash;') + '</td>';
+                        }
+
+                        rows += '</tr>';
+                    }
+                }
+
+                var headers = '<th>ID</th><th>Title</th>';
+                if (hasMidpoint) {
+                    headers += '<th>Midpoint Risk</th><th>Midpoint Details</th>';
+                    headers += '<th>Final Risk</th><th>Final Details</th>';
+                } else {
+                    headers += '<th>Midpoint Risk</th><th>Midpoint Details</th>';
+                }
+
+                div.innerHTML =
+                    '<h2>' + slide.title + '</h2>' +
+                    '<div class="table-wrap"><table>' +
+                    '<thead><tr>' + headers + '</tr></thead>' +
+                    '<tbody>' + rows + '</tbody>' +
+                    '</table></div>';
+
+                $deck.appendChild(div);
+            }
+
+            total = 1 + slides.length;
+            $empty.hidden = true;
+            $nav.hidden   = false;
+            show(0);
+        }
+
+        /* ── Fetch data on Run ──────────────────────────────────── */
+        document.getElementById('configForm').onsubmit = async function (e) {
+            e.preventDefault();
+            var url = $query.value.trim();
+            if (!url) return;
+            localStorage.setItem('ar_query', url);
+
+            var midDate = $midDate.value || '';
+            localStorage.setItem('ar_middate', midDate);
+
+            $run.disabled = true;
+            $run.textContent = 'Loading…';
+            $loading.hidden = false;
+
+            try {
+                var payload = { queryUrl: url };
+                if (midDate) payload.midpointDate = midDate;
+
+                var res = await fetch('/api/slides', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify(payload)
+                });
+                var data = await res.json();
+                if (data.error) throw new Error(data.error);
+                linkBase = data.linkBase || 'https://microsoft.visualstudio.com/Edge/_workitems/edit/';
+                hasMidpoint = !!data.hasMidpoint;
+                render(data.slides);
+            } catch (err) {
+                alert('Error: ' + err.message);
+            } finally {
+                $run.disabled = false;
+                $run.textContent = '\u25B6 Run';
+                $loading.hidden = true;
+            }
+        };
+    </script>
+
+</body>
+</html>

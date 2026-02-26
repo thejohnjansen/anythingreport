@@ -253,7 +253,17 @@
 
         /* ── Render DOC view ────────────────────────────────────── */
         function renderDoc(sections, docLinkBase) {
+            var today = new Date().toLocaleDateString('en-US', { year: 'numeric', month: 'long', day: 'numeric' });
             var html = '';
+
+            /* Document header: title, author, date */
+            html += '<header class="doc-header">';
+            html += '<h1 class="doc-title" contenteditable="true" placeholder="Report Title"></h1>';
+            html += '<div class="doc-meta">';
+            html += '<span class="doc-author" contenteditable="true" placeholder="Author">' + '</span>';
+            html += '<span class="doc-date">' + today + '</span>';
+            html += '</div>';
+            html += '</header>';
 
             /* Section 1: Workstream Overview (editable) */
             html += '<section class="doc-section">';
@@ -262,11 +272,11 @@
                     'placeholder="Write your executive summary here…"></div>';
             html += '</section>';
 
-            /* Section 2: Priorities (editable) */
+            /* Section 2: Priorities (card-based) */
             html += '<section class="doc-section">';
             html += '<h2>2. Priorities</h2>';
-            html += '<div class="editable doc-edit" contenteditable="true" ' +
-                    'placeholder="Describe priority groupings and reasoning…"></div>';
+            html += '<div id="priorityCards" class="priority-grid"></div>';
+            html += '<button type="button" id="addPriority" class="add-card-btn" title="Add priority">+ Add Priority</button>';
             html += '</section>';
 
             /* Section 3: Workstream Preview (from ADO data) */
@@ -281,6 +291,11 @@
                 for (var gi = 0; gi < sec.groups.length; gi++) {
                     var grp = sec.groups[gi];
                     html += '<h4>' + grp.title + '</h4>';
+                    html += '<dl class="group-meta">';
+                    html += '<div><dt>DRI</dt><dd>' + (grp.dri || '&mdash;') + '</dd></div>';
+                    html += '<div><dt>Original Estimate</dt><dd>' + (grp.originalEstimate || '&mdash;') + '</dd></div>';
+                    html += '<div><dt>Comments</dt><dd>' + (grp.comments || '&mdash;') + '</dd></div>';
+                    html += '</dl>';
 
                     if (grp.items.length === 0) {
                         html += '<p class="doc-no-items">No child work items</p>';
@@ -305,6 +320,29 @@
             html += '</section>';
 
             $docContent.innerHTML = html;
+
+            /* Wire up priority card add/remove */
+            var $grid = document.getElementById('priorityCards');
+            document.getElementById('addPriority').addEventListener('click', function () {
+                addPriorityCard($grid);
+            });
+        }
+
+        function addPriorityCard(container, title, desc) {
+            var card = document.createElement('div');
+            card.className = 'priority-card';
+            card.innerHTML =
+                '<button type="button" class="card-remove" title="Remove">&times;</button>' +
+                '<div class="card-title" contenteditable="true" placeholder="Priority title\u2026">' + (title || '') + '</div>' +
+                '<div class="card-desc doc-edit" contenteditable="true" placeholder="Description\u2026">' + (desc || '') + '</div>';
+
+            card.querySelector('.card-remove').addEventListener('click', function () {
+                card.remove();
+            });
+
+            container.appendChild(card);
+            /* Focus the title of the new card */
+            card.querySelector('.card-title').focus();
         }
 
         /* ── Fetch data on Run ──────────────────────────────────── */

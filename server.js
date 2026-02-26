@@ -76,7 +76,8 @@ async function fetchWorkItems(baseUrl, project, ids, token) {
         'System.Id', 'System.Title', 'System.WorkItemType',
         'System.State', 'System.AssignedTo',
         'OSG.RiskAssessment', 'OSG.RiskAssessmentComment',
-        'Microsoft.VSTS.Scheduling.OriginalEstimate'
+        'Microsoft.VSTS.Scheduling.OriginalEstimate',
+        'OSG.OverallComments'
     ].join(',');
 
     const map = {};
@@ -267,8 +268,11 @@ function buildDocSections(queryResult, workItemMap) {
                 }));
 
             groups.push({
-                title: wi?.fields?.['System.Title'] || `Work Item ${l2Id}`,
-                id: l2Id,
+                title:            wi?.fields?.['System.Title'] || `Work Item ${l2Id}`,
+                id:               l2Id,
+                dri:              wi?.fields?.['System.AssignedTo']?.displayName || '',
+                originalEstimate: wi?.fields?.['Microsoft.VSTS.Scheduling.OriginalEstimate'] ?? '',
+                comments:         wi?.fields?.['OSG.OverallComments'] || '',
                 items
             });
         }

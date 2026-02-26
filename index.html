@@ -11,6 +11,10 @@
     <!-- ── Toolbar ─────────────────────────────────────────────── -->
     <header>
         <span class="logo">Anything Report</span>
+        <div class="view-toggle">
+            <button class="view-btn active" data-view="slides">Slides</button>
+            <button class="view-btn" data-view="doc">Doc</button>
+        </div>
         <form id="configForm">
             <input type="text" id="queryUrl"
                    placeholder="Paste ADO query URL…" required>
@@ -29,12 +33,32 @@
         <div id="loading" hidden><div class="spinner"></div></div>
     </main>
 
-    <!-- ── Navigation ──────────────────────────────────────────── -->
+    <!-- ── Navigation (slides) ─────────────────────────────────── -->
     <nav id="slideNav" hidden>
         <button id="prev" title="Previous (←)">&#9664;</button>
         <span id="counter"></span>
         <button id="next" title="Next (→)">&#9654;</button>
     </nav>
+
+    <!-- ── Doc view ────────────────────────────────────────────── -->
+    <div id="docView" class="doc-view" hidden>
+        <div id="docContent" class="doc-content">
+            <div id="docEmpty" class="doc-empty">
+                Paste an Azure DevOps query URL above and click
+                <strong>Run</strong> to generate the document.
+            </div>
+        </div>
+    </div>
+
+    <!-- ── Floating formatting toolbar (shared, positioned near focused editable) ── -->
+    <div id="fmtBar" class="fmt-bar" hidden>
+        <button type="button" data-cmd="bold" title="Bold (Ctrl+B)"><b>B</b></button>
+        <button type="button" data-cmd="italic" title="Italic (Ctrl+I)"><i>I</i></button>
+        <button type="button" data-cmd="underline" title="Underline (Ctrl+U)"><u>U</u></button>
+        <span class="fmt-sep"></span>
+        <button type="button" data-cmd="insertUnorderedList" title="Bullet list">&#8226; List</button>
+        <button type="button" data-cmd="insertOrderedList" title="Numbered list">1. List</button>
+    </div>
 
     <script>
         /* ── State ──────────────────────────────────────────────── */
@@ -42,6 +66,8 @@
         let current = 0;
         let linkBase = '';
         let hasMidpoint = false;
+        let activeView = 'slides';          // 'slides' | 'doc'
+        let lastSlides = null;              // cache for view switches
 
         const $deck    = document.getElementById('deck');
         const $nav     = document.getElementById('slideNav');
@@ -51,12 +77,79 @@
         const $query   = document.getElementById('queryUrl');
         const $midDate = document.getElementById('midpointDate');
         const $run     = document.getElementById('runBtn');
+        const $docView = document.getElementById('docView');
+        const $docContent = document.getElementById('docContent');
+        const $docEmpty   = document.getElementById('docEmpty');
+        const $fmtBar     = document.getElementById('fmtBar');
 
         /* Restore saved inputs */
         $query.value   = localStorage.getItem('ar_query') || '';
         $midDate.value = localStorage.getItem('ar_middate') || '';
 
-        /* ── Navigation ─────────────────────────────────────────── */
+        /* ── View toggle ────────────────────────────────────────── */
+        document.querySelectorAll('.view-btn').forEach(function (btn) {
+            btn.addEventListener('click', function () {
+                var view = btn.dataset.view;
+                if (view === activeView) return;
+                activeView = view;
+
+                document.querySelectorAll('.view-btn').forEach(function (b) {
+                    b.classList.toggle('active', b.dataset.view === view);
+                });
+
+                if (view === 'slides') {
+                    $deck.hidden    = false;
+                    $nav.hidden     = total === 0;
+                    $docView.hidden = true;
+                } else {
+                    $deck.hidden    = true;
+                    $nav.hidden     = true;
+                    $docView.hidden = false;
+                }
+            });
+        });
+
+        /* ── Formatting toolbar (floats near focused editable) ── */
+        document.querySelectorAll('#fmtBar button').forEach(function (btn) {
+            btn.addEventListener('mousedown', function (e) {
+                e.preventDefault();
+                document.execCommand(btn.dataset.cmd, false, null);
+            });
+        });
+
+        /* Show toolbar above whichever .doc-edit is focused */
+        function positionToolbar(editEl) {
+            var rect = editEl.getBoundingClientRect();
+            $fmtBar.hidden = false;
+            $fmtBar.style.top  = (rect.top + window.scrollY - $fmtBar.offsetHeight - 4) + 'px';
+            $fmtBar.style.left = rect.left + 'px';
+            $fmtBar.style.width = rect.width + 'px';
+        }
+
+        document.addEventListener('focusin', function (e) {
+            if (e.target.classList.contains('doc-edit')) {
+                positionToolbar(e.target);
+            }
+        });
+        document.addEventListener('focusout', function (e) {
+            if (e.target.classList.contains('doc-edit')) {
+                /* Delay so toolbar button clicks register first */
+                setTimeout(function () {
+                    var active = document.activeElement;
+                    if (!active || !active.classList.contains('doc-edit')) {
+                        $fmtBar.hidden = true;
+                    }
+                }, 150);
+            }
+        });
+
+        /* Reposition on scroll inside doc content */
+        document.getElementById('docContent').addEventListener('scroll', function () {
+            var focused = document.querySelector('.doc-edit:focus');
+            if (focused) positionToolbar(focused);
+        });
+
+        /* ── Slide navigation ───────────────────────────────────── */
         function show(i) {
             current = Math.max(0, Math.min(i, total - 1));
             $deck.querySelectorAll('.slide').forEach(
@@ -67,8 +160,9 @@
 
         document.getElementById('prev').onclick = () => show(current - 1);
         document.getElementById('next').onclick = () => show(current + 1);
-        document.addEventListener('keydown', e => {
-            if (e.target.closest('.editable')) return;   /* don't hijack typing */
+        document.addEventListener('keydown', function (e) {
+            if (activeView !== 'slides') return;
+            if (e.target.closest('.editable')) return;
             if (e.key === 'ArrowLeft')  show(current - 1);
             if (e.key === 'ArrowRight') show(current + 1);
         });
@@ -82,16 +176,13 @@
             return '<span class="risk unknown">&mdash;</span>';
         }
 
-        /* ── Render slides ──────────────────────────────────────── */
-        function render(slides) {
-            /* Preserve Top-of-Mind content */
+        /* ── Render SLIDES view ─────────────────────────────────── */
+        function renderSlides(slides) {
             var tom = $deck.querySelector('#tom');
             var savedTom = tom ? tom.innerHTML : (localStorage.getItem('ar_tom') || '');
 
-            /* Remove old slides (keep #loading) */
-            $deck.querySelectorAll('.slide').forEach(s => s.remove());
+            $deck.querySelectorAll('.slide').forEach(function (s) { s.remove(); });
 
-            /* Slide 0: Top of Mind */
             var topSlide = document.createElement('div');
             topSlide.className = 'slide active';
             topSlide.innerHTML =
@@ -101,12 +192,10 @@
                 savedTom + '</div>';
             $deck.prepend(topSlide);
 
-            /* Persist edits */
             topSlide.querySelector('#tom').addEventListener('input', function () {
                 localStorage.setItem('ar_tom', this.innerHTML);
             });
 
-            /* Data slides */
             var colCount = hasMidpoint ? 6 : 4;
 
             for (var s = 0; s < slides.length; s++) {
@@ -158,8 +247,64 @@
 
             total = 1 + slides.length;
             $empty.hidden = true;
-            $nav.hidden   = false;
+            if (activeView === 'slides') $nav.hidden = false;
             show(0);
+        }
+
+        /* ── Render DOC view ────────────────────────────────────── */
+        function renderDoc(sections, docLinkBase) {
+            var html = '';
+
+            /* Section 1: Workstream Overview (editable) */
+            html += '<section class="doc-section">';
+            html += '<h2>1. Workstream Overview</h2>';
+            html += '<div class="editable doc-edit" contenteditable="true" ' +
+                    'placeholder="Write your executive summary here…"></div>';
+            html += '</section>';
+
+            /* Section 2: Priorities (editable) */
+            html += '<section class="doc-section">';
+            html += '<h2>2. Priorities</h2>';
+            html += '<div class="editable doc-edit" contenteditable="true" ' +
+                    'placeholder="Describe priority groupings and reasoning…"></div>';
+            html += '</section>';
+
+            /* Section 3: Workstream Preview (from ADO data) */
+            html += '<section class="doc-section">';
+            html += '<h2>3. Workstream Preview</h2>';
+
+            for (var si = 0; si < sections.length; si++) {
+                var sec = sections[si];
+                html += '<div class="doc-objective">';
+                html += '<h3>' + sec.objectiveTitle + '</h3>';
+
+                for (var gi = 0; gi < sec.groups.length; gi++) {
+                    var grp = sec.groups[gi];
+                    html += '<h4>' + grp.title + '</h4>';
+
+                    if (grp.items.length === 0) {
+                        html += '<p class="doc-no-items">No child work items</p>';
+                    } else {
+                        html += '<table class="doc-table"><thead><tr>' +
+                                '<th>Title</th><th>DRI</th><th>Original Estimate</th>' +
+                                '</tr></thead><tbody>';
+                        for (var ii = 0; ii < grp.items.length; ii++) {
+                            var it = grp.items[ii];
+                            html += '<tr>';
+                            html += '<td><a href="' + docLinkBase + it.id + '" target="_blank">' + it.title + '</a></td>';
+                            html += '<td>' + it.dri + '</td>';
+                            html += '<td>' + (it.originalEstimate || '&mdash;') + '</td>';
+                            html += '</tr>';
+                        }
+                        html += '</tbody></table>';
+                    }
+                }
+                html += '</div>';
+            }
+
+            html += '</section>';
+
+            $docContent.innerHTML = html;
         }
 
         /* ── Fetch data on Run ──────────────────────────────────── */
@@ -177,19 +322,35 @@
             $loading.hidden = false;
 
             try {
-                var payload = { queryUrl: url };
-                if (midDate) payload.midpointDate = midDate;
+                /* Always fetch both so toggling views is instant */
+                var slidePayload = { queryUrl: url };
+                if (midDate) slidePayload.midpointDate = midDate;
 
-                var res = await fetch('/api/slides', {
-                    method: 'POST',
-                    headers: { 'Content-Type': 'application/json' },
-                    body: JSON.stringify(payload)
-                });
-                var data = await res.json();
-                if (data.error) throw new Error(data.error);
-                linkBase = data.linkBase || 'https://microsoft.visualstudio.com/Edge/_workitems/edit/';
-                hasMidpoint = !!data.hasMidpoint;
-                render(data.slides);
+                var [slideRes, docRes] = await Promise.all([
+                    fetch('/api/slides', {
+                        method: 'POST',
+                        headers: { 'Content-Type': 'application/json' },
+                        body: JSON.stringify(slidePayload)
+                    }),
+                    fetch('/api/doc', {
+                        method: 'POST',
+                        headers: { 'Content-Type': 'application/json' },
+                        body: JSON.stringify({ queryUrl: url })
+                    })
+                ]);
+
+                var slideData = await slideRes.json();
+                var docData   = await docRes.json();
+
+                if (slideData.error) throw new Error(slideData.error);
+                if (docData.error)   throw new Error(docData.error);
+
+                linkBase    = slideData.linkBase || 'https://microsoft.visualstudio.com/Edge/_workitems/edit/';
+                hasMidpoint = !!slideData.hasMidpoint;
+                lastSlides  = slideData.slides;
+
+                renderSlides(slideData.slides);
+                renderDoc(docData.sections, docData.linkBase || linkBase);
             } catch (err) {
                 alert('Error: ' + err.message);
             } finally {

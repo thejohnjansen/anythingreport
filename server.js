@@ -75,7 +75,8 @@ async function fetchWorkItems(baseUrl, project, ids, token) {
     const fields = [
         'System.Id', 'System.Title', 'System.WorkItemType',
         'System.State', 'System.AssignedTo',
-        'OSG.RiskAssessment', 'OSG.RiskAssessmentComment'
+        'OSG.RiskAssessment', 'OSG.RiskAssessmentComment',
+        'Microsoft.VSTS.Scheduling.OriginalEstimate'
     ].join(',');
 
     const map = {};
@@ -227,6 +228,82 @@ app.post('/api/slides', async (req, res) => {
         const linkBase = `${baseUrl}/${project}/_workitems/edit/`;
 
         res.json({ slides, linkBase, hasMidpoint: !!midpointDate });
+    } catch (err) {
+        console.error('❌', err);
+        res.status(500).json({ error: err.message });
+    }
+});
+
+/* ── Build doc hierarchy ──────────────────────────────────────── */
+
+function buildDocSections(queryResult, workItemMap) {
+    const roots = [];
+    const children = {};
+
+    for (const rel of queryResult.workItemRelations || []) {
+        if (!rel.source) {
+            roots.push(rel.target.id);
+        } else {
+            (children[rel.source.id] ||= []).push(rel.target.id);
+        }
+    }
+
+    const sections = [];
+    for (const rootId of roots) {
+        const rootWi = workItemMap[rootId];
+        const groups = [];
+
+        for (const l2Id of children[rootId] || []) {
+            const wi = workItemMap[l2Id];
+            const items = (children[l2Id] || [])
+                .map(id => workItemMap[id])
+                .filter(Boolean)
+                .map(w => ({
+                    id:               w.id,
+                    title:            w.fields['System.Title'] || '',
+                    originalEstimate: w.fields['Microsoft.VSTS.Scheduling.OriginalEstimate'] ?? '',
+                    dri:              w.fields['System.AssignedTo']?.displayName || '',
+                    state:            w.fields['System.State'] || ''
+                }));
+
+            groups.push({
+                title: wi?.fields?.['System.Title'] || `Work Item ${l2Id}`,
+                id: l2Id,
+                items
+            });
+        }
+
+        sections.push({
+            objectiveTitle: rootWi?.fields?.['System.Title'] || `Objective ${rootId}`,
+            objectiveId: rootId,
+            groups
+        });
+    }
+    return sections;
+}
+
+/* ── Doc API route ────────────────────────────────────────────── */
+
+app.post('/api/doc', async (req, res) => {
+    try {
+        const { queryUrl } = req.body;
+        if (!queryUrl) return res.status(400).json({ error: 'queryUrl is required' });
+
+        const { baseUrl, project, queryId } = parseQueryUrl(queryUrl);
+        const token = getToken();
+
+        const queryResult = await runQuery(baseUrl, project, queryId, token);
+
+        const allIds = new Set();
+        for (const rel of queryResult.workItemRelations || []) {
+            if (rel.target) allIds.add(rel.target.id);
+        }
+
+        const workItemMap = await fetchWorkItems(baseUrl, project, [...allIds], token);
+        const sections = buildDocSections(queryResult, workItemMap);
+        const linkBase = `${baseUrl}/${project}/_workitems/edit/`;
+
+        res.json({ sections, linkBase });
     } catch (err) {
         console.error('❌', err);
         res.status(500).json({ error: err.message });

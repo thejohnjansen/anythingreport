@@ -176,6 +176,148 @@
             return '<span class="risk unknown">&mdash;</span>';
         }
 
+        /* ── Pipeline helpers ────────────────────────────────────── */
+        var PL_STAGES  = ['Investigate','Explainer / Design Doc','Implementation','Dev Trial','Origin Trial / CFR','Ship'];
+        var PL_HEADERS = ['INVESTIGATE','EXPLAINER /<br>DESIGN DOC','IMPLEMENTATION','DEV TRIAL','ORIGIN TRIAL /<br>CFR','SHIP'];
+
+        function plLoad() { try { return JSON.parse(localStorage.getItem('ar_pipeline')); } catch(e) { return null; } }
+        function plSave(d) { localStorage.setItem('ar_pipeline', JSON.stringify(d)); }
+
+        function plVizHTML(pl) {
+            if (!pl || !pl.rows || !pl.rows.length)
+                return '<p class="pv-empty">Click <b>&#9998; Edit</b> to add pipeline rows.</p>';
+            var h = '<div class="pv-legend">' +
+                '<span class="pv-leg"><span class="pv-leg-arrow">&#9660;</span> Roughly &ldquo;Where we are&rdquo;</span>' +
+                '<span class="pv-leg"><span class="pv-leg-circ complete"></span> Completed</span>' +
+                '<span class="pv-leg"><span class="pv-leg-circ committed"></span> Committed for current cycle</span>' +
+                '<span class="pv-leg"><span class="pv-leg-circ future"></span> Planned for future cycle</span></div>';
+            h += '<div class="pv-chart"><div class="pv-header-row"><div class="pv-corner"></div>';
+            for (var i = 0; i < PL_HEADERS.length; i++) h += '<div class="pv-col-hdr">' + PL_HEADERS[i] + '</div>';
+            h += '</div>';
+            for (var r = 0; r < pl.rows.length; r++) {
+                var row = pl.rows[r];
+                h += '<div class="pv-row"><div class="pv-topic"><span>' + (row.topic || '') + '</span></div>';
+                h += '<div class="pv-stages"><div class="pv-line"></div>';
+                for (var c = 0; c < 6; c++) {
+                    var v = (row.stages && row.stages[c] || '').trim();
+                    var here = (row.hereCol === c);
+                    var done = (v.toLowerCase() === 'complete');
+                    var empty = (v === '');
+                    h += '<div class="pv-cell">';
+                    if (here) h += '<div class="pv-arrow">&#9660;</div>';
+                    if (done) {
+                        h += '<div class="pv-node complete"></div>';
+                    } else if (!empty) {
+                        var cls = (row.hereCol >= 0 && c <= row.hereCol) ? 'committed' : 'future';
+                        h += '<div class="pv-node ' + cls + '">' + v + '</div>';
+                    }
+                    h += '</div>';
+                }
+                h += '</div></div>';
+            }
+            h += '</div>';
+            return h;
+        }
+
+        function plEditorRowHTML(rd) {
+            rd = rd || { topic: '', stages: ['','','','','',''], hereCol: -1 };
+            var h = '<tr class="pe-row"><td><input type="text" class="pe-topic" value="' +
+                (rd.topic || '').replace(/"/g, '&quot;') + '" placeholder="Topic name"></td>';
+            for (var s = 0; s < 6; s++)
+                h += '<td><input type="text" class="pe-stage" value="' +
+                    (rd.stages[s] || '').replace(/"/g, '&quot;') + '" placeholder="complete / label"></td>';
+            h += '<td><select class="pe-here"><option value="-1"' +
+                (rd.hereCol < 0 ? ' selected' : '') + '>&mdash;</option>';
+            for (var s = 0; s < PL_STAGES.length; s++)
+                h += '<option value="' + s + '"' + (rd.hereCol === s ? ' selected' : '') + '>' + PL_STAGES[s] + '</option>';
+            h += '</select></td><td><button type="button" class="pe-remove" title="Remove">&times;</button></td></tr>';
+            return h;
+        }
+
+        function plEditorHTML(pl) {
+            var d = pl || { title: 'Pipeline', rows: [] };
+            var h = '<table class="pe-table"><thead><tr><th class="pe-th-topic">Topic</th>';
+            for (var s = 0; s < PL_STAGES.length; s++) h += '<th>' + PL_STAGES[s] + '</th>';
+            h += '<th>Here</th><th></th></tr></thead><tbody id="peRows">';
+            for (var r = 0; r < d.rows.length; r++) h += plEditorRowHTML(d.rows[r]);
+            h += '</tbody></table>';
+            h += '<div class="pe-actions"><button type="button" class="pe-add" id="peAdd">+ Add Row</button>';
+            h += '<button type="button" class="pe-apply" id="peApply">&#10003; Apply</button></div>';
+            return h;
+        }
+
+        function plApply(vizEl, editorEl, titleEl) {
+            var pl = { title: titleEl.textContent || 'Pipeline', rows: [] };
+            editorEl.querySelectorAll('.pe-row').forEach(function(tr) {
+                var topic = tr.querySelector('.pe-topic').value;
+                var stages = [];
+                tr.querySelectorAll('.pe-stage').forEach(function(inp) { stages.push(inp.value); });
+                pl.rows.push({ topic: topic, stages: stages, hereCol: parseInt(tr.querySelector('.pe-here').value, 10) });
+            });
+            plSave(pl);
+            vizEl.innerHTML = plVizHTML(pl);
+        }
+
+        function plWireup(slideEl) {
+            var $viz = slideEl.querySelector('.pl-viz');
+            var $ed  = slideEl.querySelector('.pl-editor');
+            var $btn = slideEl.querySelector('.pl-edit-btn');
+            var $ttl = slideEl.querySelector('.pl-title');
+
+            function wireEditorButtons(container) {
+                container.querySelector('#peAdd').addEventListener('click', function() {
+                    var tbody = container.querySelector('#peRows');
+                    tbody.insertAdjacentHTML('beforeend', plEditorRowHTML(null));
+                    var last = tbody.lastElementChild;
+                    last.querySelector('.pe-remove').addEventListener('click', function() { last.remove(); });
+                });
+                container.querySelector('#peApply').addEventListener('click', function() {
+                    plApply($viz, $ed, $ttl);
+                    $ed.hidden = true; $viz.hidden = false;
+                    $btn.innerHTML = '&#9998; Edit';
+                });
+                container.querySelectorAll('.pe-remove').forEach(function(b) {
+                    b.addEventListener('click', function() { b.closest('.pe-row').remove(); });
+                });
+            }
+
+            $btn.addEventListener('click', function() {
+                if (!$ed.hidden) {
+                    plApply($viz, $ed, $ttl);
+                    $ed.hidden = true; $viz.hidden = false;
+                    $btn.innerHTML = '&#9998; Edit';
+                } else {
+                    var pl = plLoad() || { title: 'Pipeline', rows: [] };
+                    $ed.innerHTML = plEditorHTML(pl);
+                    wireEditorButtons($ed);
+                    $ed.hidden = false; $viz.hidden = true;
+                    $btn.innerHTML = '&#10003; Done';
+                }
+            });
+
+            $ttl.addEventListener('input', function() {
+                var pl = plLoad() || { title: 'Pipeline', rows: [] };
+                pl.title = $ttl.textContent;
+                plSave(pl);
+            });
+
+            wireEditorButtons($ed);
+        }
+
+        function createPipelineSlide() {
+            var pl = plLoad() || { title: 'Pipeline', rows: [] };
+            var div = document.createElement('div');
+            div.className = 'slide';
+            div.innerHTML =
+                '<div class="pipeline-header">' +
+                '<h2 class="pl-title" contenteditable="true">' + (pl.title || 'Pipeline') + '</h2>' +
+                '<button type="button" class="pl-edit-btn">&#9998; Edit</button></div>' +
+                '<div class="pl-viz">' + plVizHTML(pl) + '</div>' +
+                '<div class="pl-editor" hidden>' + plEditorHTML(pl) + '</div>';
+            $deck.appendChild(div);
+            plWireup(div);
+        }
+
         /* ── Render SLIDES view ─────────────────────────────────── */
         function renderSlides(slides) {
             var tom = $deck.querySelector('#tom');
@@ -195,6 +337,9 @@
             topSlide.querySelector('#tom').addEventListener('input', function () {
                 localStorage.setItem('ar_tom', this.innerHTML);
             });
+
+            /* Slide 2: Pipeline */
+            createPipelineSlide();
 
             var colCount = hasMidpoint ? 6 : 4;
 
@@ -245,7 +390,7 @@
                 $deck.appendChild(div);
             }
 
-            total = 1 + slides.length;
+            total = 2 + slides.length;
             $empty.hidden = true;
             if (activeView === 'slides') $nav.hidden = false;
             show(0);
@@ -397,6 +542,9 @@
                 $loading.hidden = true;
             }
         };
+
+        /* Show Top-of-Mind + Pipeline immediately (no data needed) */
+        renderSlides([]);
     </script>
 
 </body>

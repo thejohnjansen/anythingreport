@@ -13,6 +13,7 @@
         <span class="logo">Anything Report</span>
         <div class="view-toggle">
             <button class="view-btn active" data-view="slides">Slides</button>
+            <button class="view-btn" data-view="retro">Retro</button>
             <button class="view-btn" data-view="doc">Doc</button>
         </div>
         <form id="configForm">
@@ -40,6 +41,16 @@
         <button id="next" title="Next (→)">&#9654;</button>
     </nav>
 
+    <!-- ── Retro view ───────────────────────────────────────────── -->
+    <div id="retroView" class="retro-view" hidden>
+        <div id="retroContent" class="retro-content">
+            <div id="retroEmpty" class="doc-empty">
+                Paste an Azure DevOps query URL above and click
+                <strong>Run</strong> to generate the retro.
+            </div>
+        </div>
+    </div>
+
     <!-- ── Doc view ────────────────────────────────────────────── -->
     <div id="docView" class="doc-view" hidden>
         <div id="docContent" class="doc-content">
@@ -66,7 +77,7 @@
         let current = 0;
         let linkBase = '';
         let hasMidpoint = false;
-        let activeView = 'slides';          // 'slides' | 'doc'
+        let activeView = 'slides';          // 'slides' | 'retro' | 'doc'
         let lastSlides = null;              // cache for view switches
 
         const $deck    = document.getElementById('deck');
@@ -80,6 +91,9 @@
         const $docView = document.getElementById('docView');
         const $docContent = document.getElementById('docContent');
         const $docEmpty   = document.getElementById('docEmpty');
+        const $retroView    = document.getElementById('retroView');
+        const $retroContent = document.getElementById('retroContent');
+        const $retroEmpty   = document.getElementById('retroEmpty');
         const $fmtBar     = document.getElementById('fmtBar');
 
         /* Restore saved inputs */
@@ -97,15 +111,10 @@
                     b.classList.toggle('active', b.dataset.view === view);
                 });
 
-                if (view === 'slides') {
-                    $deck.hidden    = false;
-                    $nav.hidden     = total === 0;
-                    $docView.hidden = true;
-                } else {
-                    $deck.hidden    = true;
-                    $nav.hidden     = true;
-                    $docView.hidden = false;
-                }
+                $deck.hidden      = (view !== 'slides');
+                $nav.hidden       = (view !== 'slides') || total === 0;
+                $retroView.hidden = (view !== 'retro');
+                $docView.hidden   = (view !== 'doc');
             });
         });
 
@@ -490,6 +499,185 @@
             card.querySelector('.card-title').focus();
         }
 
+        /* ── Retro risk icons ────────────────────────────────────── */
+        function riskToKey(risk) {
+            var r = (risk || '').toLowerCase();
+            if (r.includes('on track'))  return 'green';
+            if (r.includes('at risk'))   return 'yellow';
+            if (r.includes('off track')) return 'red';
+            return '';
+        }
+
+        function retroIcon(risk) {
+            var r = (risk || '').toLowerCase();
+            if (r.includes('on track'))  return '<span class="retro-icon retro-green">&#9733;</span>';
+            if (r.includes('at risk'))   return '<span class="retro-icon retro-yellow">&#9650;</span>';
+            if (r.includes('off track')) return '<span class="retro-icon retro-red">&#11039;</span>';
+            return '<span class="retro-icon retro-none">&mdash;</span>';
+        }
+
+        function retroIconFromKey(k) {
+            if (k === 'green')  return '<span class="retro-icon retro-green">&#9733;</span>';
+            if (k === 'yellow') return '<span class="retro-icon retro-yellow">&#9650;</span>';
+            if (k === 'red')    return '<span class="retro-icon retro-red">&#11039;</span>';
+            return '<span class="retro-icon retro-none">&mdash;</span>';
+        }
+
+        function retroRagIcon(v) {
+            if (v === 'green')  return '<span class="retro-rag-big retro-green">&#9733;</span>';
+            if (v === 'yellow') return '<span class="retro-rag-big retro-yellow">&#9650;</span>';
+            if (v === 'red')    return '<span class="retro-rag-big retro-red">&#11039;</span>';
+            return '<span class="retro-rag-big retro-none">&mdash;</span>';
+        }
+
+        var retroEditing = false;
+
+        function retroSaveOverrides() {
+            var overrides = {};
+            $retroContent.querySelectorAll('tr[data-retro-id]').forEach(function(tr) {
+                var id = tr.dataset.retroId;
+                var ragSel = tr.querySelector('.retro-rag-sel');
+                var faInput = tr.querySelector('.retro-fa-input');
+                var missionEl = tr.querySelector('.retro-mission');
+                var msItems = tr.querySelectorAll('.retro-ms-text');
+                var justItems = tr.querySelectorAll('.retro-just-text');
+
+                var msRiskSels = tr.querySelectorAll('.retro-ms-risk-sel');
+                overrides[id] = {
+                    rag: ragSel ? ragSel.value : (tr.dataset.rag || ''),
+                    featureArea: faInput ? faInput.value : (tr.querySelector('.retro-fa-display')?.textContent || ''),
+                    mission: missionEl ? missionEl.textContent : '',
+                    milestones: [].map.call(msItems, function(el) { return el.textContent; }),
+                    milestoneRisks: [].map.call(msRiskSels, function(sel) { return sel.value; }),
+                    justifications: [].map.call(justItems, function(el) { return el.textContent; })
+                };
+            });
+            localStorage.setItem('ar_retro_user', JSON.stringify(overrides));
+            return overrides;
+        }
+
+        function retroToggleEdit() {
+            var btn = $retroContent.querySelector('.retro-edit-btn');
+            if (retroEditing) {
+                /* Save and switch to read-only */
+                var ov = retroSaveOverrides();
+                retroEditing = false;
+                /* Re-render using stored data + overrides */
+                renderRetroFromCache();
+                return;
+            }
+            /* Switch to edit mode */
+            retroEditing = true;
+            $retroContent.querySelectorAll('.retro-rag-sel').forEach(function(s) { s.hidden = false; });
+            $retroContent.querySelectorAll('.retro-fa-input').forEach(function(s) { s.hidden = false; });
+            $retroContent.querySelectorAll('.retro-fa-display').forEach(function(s) { s.hidden = true; });
+            $retroContent.querySelectorAll('.retro-mission').forEach(function(s) { s.contentEditable = 'true'; s.classList.add('retro-editable'); });
+            $retroContent.querySelectorAll('.retro-ms-text').forEach(function(s) { s.contentEditable = 'true'; s.classList.add('retro-editable'); });
+            $retroContent.querySelectorAll('.retro-just-text').forEach(function(s) { s.contentEditable = 'true'; s.classList.add('retro-editable'); });
+            $retroContent.querySelectorAll('.retro-ms-risk-sel').forEach(function(s) { s.hidden = false; });
+            $retroContent.querySelectorAll('.retro-ms-icon-display').forEach(function(s) { s.hidden = true; });
+            btn.innerHTML = '&#10003; Done';
+        }
+
+        var lastRetroRows = null;
+        var lastRetroLinkBase = '';
+
+        function renderRetroFromCache() {
+            if (lastRetroRows) renderRetro(lastRetroRows, lastRetroLinkBase);
+        }
+
+        /* ── Render RETRO view ───────────────────────────────────── */
+        function renderRetro(rows, retroLinkBase) {
+            lastRetroRows = rows;
+            lastRetroLinkBase = retroLinkBase;
+            retroEditing = false;
+
+            /* Load saved overrides */
+            var saved = {};
+            try { saved = JSON.parse(localStorage.getItem('ar_retro_user')) || {}; } catch(e) {}
+
+            var h = '<div class="retro-slide">';
+            h += '<div class="retro-header"><button type="button" class="retro-edit-btn">&#9998; Edit</button></div>';
+            h += '<table class="retro-table"><thead><tr>';
+            h += '<th class="retro-th-rag">RAG</th>';
+            h += '<th class="retro-th-fa">Feature Area</th>';
+            h += '<th>Mission</th>';
+            h += '<th>Milestones</th>';
+            h += '<th>Justification</th>';
+            h += '</tr></thead><tbody>';
+
+            for (var i = 0; i < rows.length; i++) {
+                var row = rows[i];
+                var ov = saved[row.id] || {};
+                var rag = ov.rag || '';
+                var fa = ov.featureArea || '';
+                var mission = ov.mission || row.mission;
+
+                h += '<tr data-retro-id="' + row.id + '" data-rag="' + rag + '">';
+
+                /* RAG — read-only: big icon; edit: selector (hidden initially) */
+                h += '<td class="retro-rag-cell">';
+                h += '<select class="retro-rag-sel" data-id="' + row.id + '" hidden>';
+                h += '<option value=""'  + (rag === '' ? ' selected' : '') + '>&mdash;</option>';
+                h += '<option value="green"' + (rag === 'green' ? ' selected' : '') + '>&#9733; Green</option>';
+                h += '<option value="yellow"' + (rag === 'yellow' ? ' selected' : '') + '>&#9650; Yellow</option>';
+                h += '<option value="red"' + (rag === 'red' ? ' selected' : '') + '>&#11039; Red</option>';
+                h += '</select>';
+                h += retroRagIcon(rag);
+                h += '</td>';
+
+                /* Feature area — read-only span + hidden input */
+                h += '<td>';
+                h += '<span class="retro-fa-display">' + (fa || '&mdash;') + '</span>';
+                h += '<input class="retro-fa-input" data-id="' + row.id +
+                     '" value="' + fa.replace(/"/g, '&quot;') +
+                     '" placeholder="Feature area…" hidden>';
+                h += '</td>';
+
+                /* Mission — text, contenteditable toggled by edit button */
+                h += '<td class="retro-mission">' + mission + '</td>';
+
+                /* Milestones: bullet list with risk icons + risk selector, text is editable in edit mode */
+                h += '<td><ul class="retro-ms-list">';
+                for (var m = 0; m < row.milestones.length; m++) {
+                    var ms = row.milestones[m];
+                    var msRiskKey = (ov.milestoneRisks && ov.milestoneRisks[m] !== undefined) ? ov.milestoneRisks[m] : riskToKey(ms.risk);
+                    var msText = (ov.milestones && ov.milestones[m] !== undefined) ? ov.milestones[m] : ms.title;
+                    h += '<li>';
+                    /* Read-only icon */
+                    h += '<span class="retro-ms-icon-display">' + retroIconFromKey(msRiskKey) + '</span>';
+                    /* Edit-mode selector (hidden by default) */
+                    h += '<select class="retro-ms-risk-sel" hidden>';
+                    h += '<option value=""' + (msRiskKey === '' ? ' selected' : '') + '>&mdash;</option>';
+                    h += '<option value="green"' + (msRiskKey === 'green' ? ' selected' : '') + '>&#9733; Green</option>';
+                    h += '<option value="yellow"' + (msRiskKey === 'yellow' ? ' selected' : '') + '>&#9650; Yellow</option>';
+                    h += '<option value="red"' + (msRiskKey === 'red' ? ' selected' : '') + '>&#11039; Red</option>';
+                    h += '</select> ';
+                    h += '<span class="retro-ms-text">' + msText + '</span>';
+                    h += '</li>';
+                }
+                h += '</ul></td>';
+
+                /* Justification — editable text */
+                h += '<td><ul class="retro-just-list">';
+                for (var j = 0; j < row.justifications.length; j++) {
+                    var justText = (ov.justifications && ov.justifications[j] !== undefined) ? ov.justifications[j] : row.justifications[j];
+                    h += '<li><span class="retro-just-text">' + (justText || '&mdash;') + '</span></li>';
+                }
+                h += '</ul></td>';
+
+                h += '</tr>';
+            }
+
+            h += '</tbody></table></div>';
+
+            $retroContent.innerHTML = h;
+            if ($retroEmpty) $retroEmpty.hidden = true;
+
+            /* Wire edit button */
+            $retroContent.querySelector('.retro-edit-btn').addEventListener('click', retroToggleEdit);
+        }
+
         /* ── Fetch data on Run ──────────────────────────────────── */
         document.getElementById('configForm').onsubmit = async function (e) {
             e.preventDefault();
@@ -504,12 +692,15 @@
             $run.textContent = 'Loading…';
             $loading.hidden = false;
 
+            /* Clear retro overrides so ADO is source of truth on re-Run */
+            localStorage.removeItem('ar_retro_user');
+
             try {
-                /* Always fetch both so toggling views is instant */
+                /* Always fetch all three so toggling views is instant */
                 var slidePayload = { queryUrl: url };
                 if (midDate) slidePayload.midpointDate = midDate;
 
-                var [slideRes, docRes] = await Promise.all([
+                var [slideRes, docRes, retroRes] = await Promise.all([
                     fetch('/api/slides', {
                         method: 'POST',
                         headers: { 'Content-Type': 'application/json' },
@@ -519,20 +710,28 @@
                         method: 'POST',
                         headers: { 'Content-Type': 'application/json' },
                         body: JSON.stringify({ queryUrl: url })
+                    }),
+                    fetch('/api/retro', {
+                        method: 'POST',
+                        headers: { 'Content-Type': 'application/json' },
+                        body: JSON.stringify({ queryUrl: url })
                     })
                 ]);
 
                 var slideData = await slideRes.json();
                 var docData   = await docRes.json();
+                var retroData = await retroRes.json();
 
                 if (slideData.error) throw new Error(slideData.error);
                 if (docData.error)   throw new Error(docData.error);
+                if (retroData.error) throw new Error(retroData.error);
 
                 linkBase    = slideData.linkBase || 'https://microsoft.visualstudio.com/Edge/_workitems/edit/';
                 hasMidpoint = !!slideData.hasMidpoint;
                 lastSlides  = slideData.slides;
 
                 renderSlides(slideData.slides);
+                renderRetro(retroData.rows, retroData.linkBase || linkBase);
                 renderDoc(docData.sections, docData.linkBase || linkBase);
             } catch (err) {
                 alert('Error: ' + err.message);

@@ -314,6 +314,74 @@ app.post('/api/doc', async (req, res) => {
     }
 });
 
+/* ── Build retro rows ─────────────────────────────────────────── */
+
+function buildRetroRows(queryResult, workItemMap) {
+    const roots = [];
+    const children = {};
+
+    for (const rel of queryResult.workItemRelations || []) {
+        if (!rel.source) {
+            roots.push(rel.target.id);
+        } else {
+            (children[rel.source.id] ||= []).push(rel.target.id);
+        }
+    }
+
+    const rows = [];
+    for (const rootId of roots) {
+        for (const l2Id of children[rootId] || []) {
+            const wi = workItemMap[l2Id];
+            const l3Items = (children[l2Id] || [])
+                .map(id => workItemMap[id])
+                .filter(Boolean);
+
+            rows.push({
+                id:      l2Id,
+                mission: wi?.fields?.['System.Title'] || `Work Item ${l2Id}`,
+                milestones: l3Items.map(w => ({
+                    id:    w.id,
+                    title: w.fields['System.Title'] || '',
+                    risk:  w.fields['OSG.RiskAssessment'] || ''
+                })),
+                justifications: l3Items.map(w => {
+                    var c = w.fields['OSG.RiskAssessmentComment'] || '';
+                    return c.length > 100 ? c.slice(0, 100) + '…' : c;
+                })
+            });
+        }
+    }
+    return rows;
+}
+
+/* ── Retro API route ──────────────────────────────────────────── */
+
+app.post('/api/retro', async (req, res) => {
+    try {
+        const { queryUrl } = req.body;
+        if (!queryUrl) return res.status(400).json({ error: 'queryUrl is required' });
+
+        const { baseUrl, project, queryId } = parseQueryUrl(queryUrl);
+        const token = getToken();
+
+        const queryResult = await runQuery(baseUrl, project, queryId, token);
+
+        const allIds = new Set();
+        for (const rel of queryResult.workItemRelations || []) {
+            if (rel.target) allIds.add(rel.target.id);
+        }
+
+        const workItemMap = await fetchWorkItems(baseUrl, project, [...allIds], token);
+        const rows = buildRetroRows(queryResult, workItemMap);
+        const linkBase = `${baseUrl}/${project}/_workitems/edit/`;
+
+        res.json({ rows, linkBase });
+    } catch (err) {
+        console.error('❌', err);
+        res.status(500).json({ error: err.message });
+    }
+});
+
 /* ── Start ────────────────────────────────────────────────────── */
 
 app.listen(PORT, () => {

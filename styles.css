@@ -328,6 +328,180 @@ nav span {
 
 @keyframes spin { to { transform: rotate(360deg); } }
 
+/* ── Retro view ───────────────────────────────────────────────── */
+
+.retro-view {
+    flex: 1;
+    display: flex;
+    flex-direction: column;
+    overflow: hidden;
+}
+.retro-view[hidden] { display: none !important; }
+
+.retro-content {
+    flex: 1;
+    overflow: auto;
+    background: var(--bg);
+    padding: 32px 48px 48px;
+}
+
+.retro-slide {
+    max-width: 1200px;
+    margin: 0 auto;
+    background: var(--slide-bg);
+    border-radius: 10px;
+    box-shadow: 0 4px 24px rgba(0, 0, 0, 0.2);
+    padding: 32px 28px;
+    overflow-x: auto;
+}
+
+.retro-table {
+    width: 100%;
+    border-collapse: collapse;
+    font-size: 13px;
+}
+.retro-table th {
+    background: #f7f8fa;
+    padding: 10px 8px;
+    font-size: 11px;
+    font-weight: 700;
+    text-transform: uppercase;
+    color: #555;
+    border-bottom: 2px solid #ddd;
+    text-align: left;
+    white-space: nowrap;
+}
+.retro-th-rag { width: 70px; text-align: center !important; }
+.retro-th-fa  { width: 130px; }
+
+.retro-table td {
+    padding: 10px 8px;
+    border-bottom: 1px solid #eee;
+    vertical-align: top;
+    line-height: 1.5;
+}
+.retro-table tr:hover td { background: #f8f9fb; }
+
+/* RAG cell */
+.retro-rag-cell {
+    text-align: center;
+    white-space: nowrap;
+}
+.retro-rag-sel {
+    padding: 3px 4px;
+    border: 1px solid #ddd;
+    border-radius: 4px;
+    font-size: 12px;
+    cursor: pointer;
+    background: #fff;
+}
+.retro-rag-display {
+    display: inline-block;
+    margin-left: 4px;
+    vertical-align: middle;
+}
+
+/* Feature area input */
+.retro-fa-input {
+    width: 100%;
+    padding: 5px 6px;
+    border: 1px solid #ddd;
+    border-radius: 4px;
+    font-size: 13px;
+    outline: none;
+}
+.retro-fa-input:focus { border-color: var(--accent); }
+
+/* Mission cell */
+.retro-mission {
+    font-weight: 600;
+    color: #1a1a2e;
+}
+
+/* Risk icons */
+.retro-icon {
+    font-size: 14px;
+    vertical-align: middle;
+    margin-right: 2px;
+}
+.retro-green  { color: #2a8e2a; }
+.retro-yellow { color: #d4a017; }
+.retro-red    { color: #d42020; }
+.retro-none   { color: #aaa; }
+
+/* Milestone and justification lists */
+.retro-ms-list, .retro-just-list {
+    margin: 0;
+    padding-left: 6px;
+    list-style: none;
+}
+.retro-ms-list li, .retro-just-list li {
+    margin-bottom: 4px;
+    line-height: 1.45;
+}
+.retro-ms-list a {
+    color: var(--accent);
+    text-decoration: none;
+}
+.retro-ms-list a:hover { text-decoration: underline; }
+
+/* Milestone risk selector (edit mode) */
+.retro-ms-risk-sel {
+    padding: 2px 3px;
+    border: 1px solid #ddd;
+    border-radius: 4px;
+    font-size: 11px;
+    cursor: pointer;
+    background: #fff;
+    vertical-align: middle;
+}
+
+.retro-just-list li {
+    color: #555;
+    font-size: 12px;
+}
+
+/* Retro header + edit button */
+.retro-header {
+    display: flex;
+    justify-content: flex-end;
+    margin-bottom: 12px;
+}
+.retro-edit-btn {
+    background: var(--accent);
+    color: #fff;
+    border: none;
+    border-radius: 6px;
+    padding: 6px 18px;
+    font-size: 13px;
+    font-weight: 600;
+    cursor: pointer;
+    transition: background 0.15s ease;
+}
+.retro-edit-btn:hover { background: #3a7bd5; }
+
+/* Big RAG icon for read-only view */
+.retro-rag-big {
+    font-size: 26px;
+    vertical-align: middle;
+}
+
+/* Read-only feature-area display */
+.retro-fa-display {
+    font-size: 13px;
+    color: #333;
+}
+
+/* Editable cell highlight (edit mode) */
+.retro-editable {
+    outline: 1px dashed var(--accent);
+    outline-offset: 2px;
+    background: #f0f5ff;
+    border-radius: 3px;
+    padding: 2px 4px;
+    min-height: 1.4em;
+}
+
 /* ── Doc view ─────────────────────────────────────────────────── */
 
 .doc-view {

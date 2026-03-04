@@ -465,9 +465,11 @@ nav span {
 .retro-header {
     display: flex;
     justify-content: flex-end;
+    gap: 8px;
     margin-bottom: 12px;
 }
-.retro-edit-btn {
+.retro-edit-btn,
+.retro-fit-btn {
     background: var(--accent);
     color: #fff;
     border: none;
@@ -478,7 +480,14 @@ nav span {
     cursor: pointer;
     transition: background 0.15s ease;
 }
-.retro-edit-btn:hover { background: #3a7bd5; }
+.retro-edit-btn:hover,
+.retro-fit-btn:hover { background: #3a7bd5; }
+.retro-fit-btn {
+    background: #555;
+}
+.retro-fit-btn.active {
+    background: var(--accent);
+}
 
 /* Big RAG icon for read-only view */
 .retro-rag-big {
@@ -501,6 +510,64 @@ nav span {
     padding: 2px 4px;
     min-height: 1.4em;
 }
+
+/* ── Slide Fit mode (1280×720 fixed, compact) ────────────────── */
+.retro-slide-fit {
+    width: 1280px;
+    height: 720px;
+    max-width: 1280px;
+    padding: 20px 22px;
+    box-sizing: border-box;
+    overflow: hidden;
+    display: flex;
+    flex-direction: column;
+}
+.retro-slide-fit .retro-header {
+    margin-bottom: 6px;
+    flex-shrink: 0;
+}
+.retro-slide-fit .retro-header button {
+    font-size: 11px;
+    padding: 3px 10px;
+}
+.retro-slide-fit .retro-table {
+    font-size: 10px;
+    flex: 1;
+}
+.retro-slide-fit .retro-table th {
+    padding: 4px 5px;
+    font-size: 9px;
+}
+.retro-slide-fit .retro-table td {
+    padding: 3px 5px;
+    line-height: 1.3;
+}
+.retro-slide-fit .retro-rag-big {
+    font-size: 18px;
+}
+.retro-slide-fit .retro-icon {
+    font-size: 10px;
+}
+.retro-slide-fit .retro-ms-list,
+.retro-slide-fit .retro-just-list {
+    padding-left: 4px;
+}
+.retro-slide-fit .retro-ms-list li,
+.retro-slide-fit .retro-just-list li {
+    margin-bottom: 1px;
+    line-height: 1.25;
+}
+.retro-slide-fit .retro-just-list li {
+    font-size: 9px;
+}
+.retro-slide-fit .retro-mission {
+    font-size: 10px;
+}
+.retro-slide-fit .retro-fa-display {
+    font-size: 10px;
+}
+.retro-slide-fit .retro-th-rag { width: 50px; }
+.retro-slide-fit .retro-th-fa  { width: 90px; }
 
 /* ── Doc view ─────────────────────────────────────────────────── */
 

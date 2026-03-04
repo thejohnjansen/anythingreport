@@ -531,8 +531,18 @@
         }
 
         var retroEditing = false;
+        var retroSlideFit = false;
+
+        function retroToggleFit() {
+            retroSlideFit = !retroSlideFit;
+            renderRetroFromCache();
+        }
 
         function retroSaveOverrides() {
+            /* Load previous overrides so cleared (skipped) items are preserved */
+            var prev = {};
+            try { prev = JSON.parse(localStorage.getItem('ar_retro_user')) || {}; } catch(e) {}
+
             var overrides = {};
             $retroContent.querySelectorAll('tr[data-retro-id]').forEach(function(tr) {
                 var id = tr.dataset.retroId;
@@ -543,13 +553,25 @@
                 var justItems = tr.querySelectorAll('.retro-just-text');
 
                 var msRiskSels = tr.querySelectorAll('.retro-ms-risk-sel');
+
+                /* Start from previous overrides for this row (keeps cleared items) */
+                var prevRow = prev[id] || {};
+                var msArr = Object.assign({}, prevRow.milestones || {});
+                var msRiskArr = Object.assign({}, prevRow.milestoneRisks || {});
+                var justArr = Object.assign({}, prevRow.justifications || {});
+
+                /* Overlay current DOM values */
+                msItems.forEach(function(el) { msArr[el.dataset.idx] = el.textContent; });
+                msRiskSels.forEach(function(sel) { msRiskArr[sel.dataset.idx] = sel.value; });
+                justItems.forEach(function(el) { justArr[el.dataset.idx] = el.textContent; });
+
                 overrides[id] = {
                     rag: ragSel ? ragSel.value : (tr.dataset.rag || ''),
                     featureArea: faInput ? faInput.value : (tr.querySelector('.retro-fa-display')?.textContent || ''),
                     mission: missionEl ? missionEl.textContent : '',
-                    milestones: [].map.call(msItems, function(el) { return el.textContent; }),
-                    milestoneRisks: [].map.call(msRiskSels, function(sel) { return sel.value; }),
-                    justifications: [].map.call(justItems, function(el) { return el.textContent; })
+                    milestones: msArr,
+                    milestoneRisks: msRiskArr,
+                    justifications: justArr
                 };
             });
             localStorage.setItem('ar_retro_user', JSON.stringify(overrides));
@@ -596,8 +618,11 @@
             var saved = {};
             try { saved = JSON.parse(localStorage.getItem('ar_retro_user')) || {}; } catch(e) {}
 
-            var h = '<div class="retro-slide">';
-            h += '<div class="retro-header"><button type="button" class="retro-edit-btn">&#9998; Edit</button></div>';
+            var h = '<div class="retro-slide' + (retroSlideFit ? ' retro-slide-fit' : '') + '">';
+            h += '<div class="retro-header">';
+            h += '<button type="button" class="retro-fit-btn' + (retroSlideFit ? ' active' : '') + '">&#9634; Slide Fit</button>';
+            h += '<button type="button" class="retro-edit-btn">&#9998; Edit</button>';
+            h += '</div>';
             h += '<table class="retro-table"><thead><tr>';
             h += '<th class="retro-th-rag">RAG</th>';
             h += '<th class="retro-th-fa">Feature Area</th>';
@@ -628,7 +653,7 @@
 
                 /* Feature area — read-only span + hidden input */
                 h += '<td>';
-                h += '<span class="retro-fa-display">' + (fa || '&mdash;') + '</span>';
+                h += '<span class="retro-fa-display">' + (fa || '') + '</span>';
                 h += '<input class="retro-fa-input" data-id="' + row.id +
                      '" value="' + fa.replace(/"/g, '&quot;') +
                      '" placeholder="Feature area…" hidden>';
@@ -643,17 +668,19 @@
                     var ms = row.milestones[m];
                     var msRiskKey = (ov.milestoneRisks && ov.milestoneRisks[m] !== undefined) ? ov.milestoneRisks[m] : riskToKey(ms.risk);
                     var msText = (ov.milestones && ov.milestones[m] !== undefined) ? ov.milestones[m] : ms.title;
+                    /* Skip items the user cleared */
+                    if (ov.milestones && ov.milestones[m] !== undefined && msText.trim() === '') continue;
                     h += '<li>';
                     /* Read-only icon */
                     h += '<span class="retro-ms-icon-display">' + retroIconFromKey(msRiskKey) + '</span>';
                     /* Edit-mode selector (hidden by default) */
-                    h += '<select class="retro-ms-risk-sel" hidden>';
+                    h += '<select class="retro-ms-risk-sel" data-idx="' + m + '" hidden>';
                     h += '<option value=""' + (msRiskKey === '' ? ' selected' : '') + '>&mdash;</option>';
                     h += '<option value="green"' + (msRiskKey === 'green' ? ' selected' : '') + '>&#9733; Green</option>';
                     h += '<option value="yellow"' + (msRiskKey === 'yellow' ? ' selected' : '') + '>&#9650; Yellow</option>';
                     h += '<option value="red"' + (msRiskKey === 'red' ? ' selected' : '') + '>&#11042; Red</option>';
                     h += '</select> ';
-                    h += '<span class="retro-ms-text">' + msText + '</span>';
+                    h += '<span class="retro-ms-text" data-idx="' + m + '">' + msText + '</span>';
                     h += '</li>';
                 }
                 h += '</ul></td>';
@@ -662,7 +689,9 @@
                 h += '<td><ul class="retro-just-list">';
                 for (var j = 0; j < row.justifications.length; j++) {
                     var justText = (ov.justifications && ov.justifications[j] !== undefined) ? ov.justifications[j] : row.justifications[j];
-                    h += '<li><span class="retro-just-text">' + (justText || '&mdash;') + '</span></li>';
+                    /* Skip items the user cleared */
+                    if (ov.justifications && ov.justifications[j] !== undefined && justText.trim() === '') continue;
+                    h += '<li><span class="retro-just-text" data-idx="' + j + '">' + (justText || '') + '</span></li>';
                 }
                 h += '</ul></td>';
 
@@ -674,8 +703,9 @@
             $retroContent.innerHTML = h;
             if ($retroEmpty) $retroEmpty.hidden = true;
 
-            /* Wire edit button */
+            /* Wire buttons */
             $retroContent.querySelector('.retro-edit-btn').addEventListener('click', retroToggleEdit);
+            $retroContent.querySelector('.retro-fit-btn').addEventListener('click', retroToggleFit);
         }
 
         /* ── Fetch data on Run ──────────────────────────────────── */

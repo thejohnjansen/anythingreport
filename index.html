@@ -512,21 +512,21 @@
             var r = (risk || '').toLowerCase();
             if (r.includes('on track'))  return '<span class="retro-icon retro-green">&#9733;</span>';
             if (r.includes('at risk'))   return '<span class="retro-icon retro-yellow">&#9650;</span>';
-            if (r.includes('off track')) return '<span class="retro-icon retro-red">&#11039;</span>';
+            if (r.includes('off track')) return '<span class="retro-icon retro-red">&#11042;</span>';
             return '<span class="retro-icon retro-none">&mdash;</span>';
         }
 
         function retroIconFromKey(k) {
             if (k === 'green')  return '<span class="retro-icon retro-green">&#9733;</span>';
             if (k === 'yellow') return '<span class="retro-icon retro-yellow">&#9650;</span>';
-            if (k === 'red')    return '<span class="retro-icon retro-red">&#11039;</span>';
+            if (k === 'red')    return '<span class="retro-icon retro-red">&#11042;</span>';
             return '<span class="retro-icon retro-none">&mdash;</span>';
         }
 
         function retroRagIcon(v) {
             if (v === 'green')  return '<span class="retro-rag-big retro-green">&#9733;</span>';
             if (v === 'yellow') return '<span class="retro-rag-big retro-yellow">&#9650;</span>';
-            if (v === 'red')    return '<span class="retro-rag-big retro-red">&#11039;</span>';
+            if (v === 'red')    return '<span class="retro-rag-big retro-red">&#11042;</span>';
             return '<span class="retro-rag-big retro-none">&mdash;</span>';
         }
 
@@ -621,7 +621,7 @@
                 h += '<option value=""'  + (rag === '' ? ' selected' : '') + '>&mdash;</option>';
                 h += '<option value="green"' + (rag === 'green' ? ' selected' : '') + '>&#9733; Green</option>';
                 h += '<option value="yellow"' + (rag === 'yellow' ? ' selected' : '') + '>&#9650; Yellow</option>';
-                h += '<option value="red"' + (rag === 'red' ? ' selected' : '') + '>&#11039; Red</option>';
+                h += '<option value="red"' + (rag === 'red' ? ' selected' : '') + '>&#11042; Red</option>';
                 h += '</select>';
                 h += retroRagIcon(rag);
                 h += '</td>';
@@ -651,7 +651,7 @@
                     h += '<option value=""' + (msRiskKey === '' ? ' selected' : '') + '>&mdash;</option>';
                     h += '<option value="green"' + (msRiskKey === 'green' ? ' selected' : '') + '>&#9733; Green</option>';
                     h += '<option value="yellow"' + (msRiskKey === 'yellow' ? ' selected' : '') + '>&#9650; Yellow</option>';
-                    h += '<option value="red"' + (msRiskKey === 'red' ? ' selected' : '') + '>&#11039; Red</option>';
+                    h += '<option value="red"' + (msRiskKey === 'red' ? ' selected' : '') + '>&#11042; Red</option>';
                     h += '</select> ';
                     h += '<span class="retro-ms-text">' + msText + '</span>';
                     h += '</li>';

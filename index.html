@@ -598,7 +598,44 @@
             $retroContent.querySelectorAll('.retro-just-text').forEach(function(s) { s.contentEditable = 'true'; s.classList.add('retro-editable'); });
             $retroContent.querySelectorAll('.retro-ms-risk-sel').forEach(function(s) { s.hidden = false; });
             $retroContent.querySelectorAll('.retro-ms-icon-display').forEach(function(s) { s.hidden = true; });
+            /* Show add buttons */
+            $retroContent.querySelectorAll('.retro-add-ms-btn').forEach(function(b) { b.hidden = false; });
+            $retroContent.querySelectorAll('.retro-add-just-btn').forEach(function(b) { b.hidden = false; });
             btn.innerHTML = '&#10003; Done';
+
+            /* Wire add-milestone buttons */
+            $retroContent.querySelectorAll('.retro-add-ms-btn').forEach(function(b) {
+                b.addEventListener('click', function() {
+                    var ul = b.previousElementSibling;
+                    var existing = ul.querySelectorAll('.retro-ms-text[data-idx^="add-"]');
+                    var nextIdx = 'add-' + existing.length;
+                    var li = document.createElement('li');
+                    li.innerHTML =
+                        '<span class="retro-ms-icon-display" hidden></span>' +
+                        '<select class="retro-ms-risk-sel" data-idx="' + nextIdx + '">' +
+                        '<option value="" selected>&mdash;</option>' +
+                        '<option value="green">&#9733; Green</option>' +
+                        '<option value="yellow">&#9650; Yellow</option>' +
+                        '<option value="red">&#11042; Red</option>' +
+                        '</select> ' +
+                        '<span class="retro-ms-text retro-editable" data-idx="' + nextIdx + '" contenteditable="true"></span>';
+                    ul.appendChild(li);
+                    li.querySelector('.retro-ms-text').focus();
+                });
+            });
+
+            /* Wire add-justification buttons */
+            $retroContent.querySelectorAll('.retro-add-just-btn').forEach(function(b) {
+                b.addEventListener('click', function() {
+                    var ul = b.previousElementSibling;
+                    var existing = ul.querySelectorAll('.retro-just-text[data-idx^="add-"]');
+                    var nextIdx = 'add-' + existing.length;
+                    var li = document.createElement('li');
+                    li.innerHTML = '<span class="retro-just-text retro-editable" data-idx="' + nextIdx + '" contenteditable="true"></span>';
+                    ul.appendChild(li);
+                    li.querySelector('.retro-just-text').focus();
+                });
+            });
         }
 
         var lastRetroRows = null;
@@ -619,6 +656,93 @@
                 retroSortDir = 1;
             }
             renderRetroFromCache();
+        }
+
+        /* ── Paginate retro table into 1280×720 slides ──────────── */
+        function retroPaginate() {
+            var slide = $retroContent.querySelector('.retro-slide-fit');
+            if (!slide) return;
+            var table = slide.querySelector('.retro-table');
+            if (!table) return;
+
+            var headerEl = slide.querySelector('.retro-header');
+            var thead = table.querySelector('thead');
+            var tbody = table.querySelector('tbody');
+            var rows = Array.from(tbody.querySelectorAll('tr'));
+            if (rows.length === 0) return;
+
+            /* Temporarily show retroView if hidden so we can measure */
+            var wasHidden = $retroView.hidden;
+            if (wasHidden) {
+                $retroView.style.position = 'absolute';
+                $retroView.style.visibility = 'hidden';
+                $retroView.hidden = false;
+            }
+
+            var SLIDE_H = 720;
+            var PAD = 40;          /* 20px top + 20px bottom */
+            var PAGE_IND_H = 22;   /* page indicator line */
+            var headerH = headerEl ? headerEl.offsetHeight + 6 : 0;
+            var theadH = thead.offsetHeight;
+
+            var budget1 = SLIDE_H - PAD - headerH - theadH - PAGE_IND_H;
+            var budgetN = SLIDE_H - PAD - theadH - PAGE_IND_H;
+
+            /* Measure each row */
+            var rh = rows.map(function(r) { return r.offsetHeight; });
+
+            /* Restore visibility */
+            if (wasHidden) {
+                $retroView.hidden = true;
+                $retroView.style.position = '';
+                $retroView.style.visibility = '';
+            }
+
+            /* Split rows into pages */
+            var pages = [];
+            var page = [];
+            var used = 0;
+            var budget = budget1;
+            for (var i = 0; i < rows.length; i++) {
+                if (used + rh[i] > budget && page.length > 0) {
+                    pages.push(page);
+                    page = [];
+                    used = 0;
+                    budget = budgetN;
+                }
+                page.push(i);
+                used += rh[i];
+            }
+            if (page.length > 0) pages.push(page);
+
+            /* If everything fits on one page, no split needed */
+            if (pages.length <= 1) return;
+
+            /* Build multiple slide containers */
+            var theadHTML = thead.outerHTML;
+            var headerHTML = headerEl ? headerEl.outerHTML : '';
+            var frag = document.createDocumentFragment();
+
+            for (var p = 0; p < pages.length; p++) {
+                var div = document.createElement('div');
+                div.className = 'retro-slide retro-slide-fit';
+                var html = '';
+                if (p === 0) {
+                    html += headerHTML;
+                }
+                html += '<div class="retro-page-indicator">Page ' +
+                        (p + 1) + ' / ' + pages.length + '</div>';
+                html += '<table class="retro-table">' + theadHTML + '<tbody>';
+                for (var r = 0; r < pages[p].length; r++) {
+                    html += rows[pages[p][r]].outerHTML;
+                }
+                html += '</tbody></table>';
+                div.innerHTML = html;
+                frag.appendChild(div);
+            }
+
+            $retroContent.innerHTML = '';
+            $retroContent.appendChild(frag);
         }
 
         function renderRetroFromCache() {
@@ -723,12 +847,14 @@
 
                 /* Milestones: bullet list with risk icons + risk selector, text is editable in edit mode */
                 h += '<td><ul class="retro-ms-list">';
+                var msRendered = 0;
                 for (var m = 0; m < row.milestones.length; m++) {
                     var ms = row.milestones[m];
                     var msRiskKey = (ov.milestoneRisks && ov.milestoneRisks[m] !== undefined) ? ov.milestoneRisks[m] : riskToKey(ms.risk);
                     var msText = (ov.milestones && ov.milestones[m] !== undefined) ? ov.milestones[m] : ms.title;
                     /* Skip items the user cleared */
                     if (ov.milestones && ov.milestones[m] !== undefined && msText.trim() === '') continue;
+                    msRendered++;
                     h += '<li>';
                     /* Read-only icon */
                     h += '<span class="retro-ms-icon-display">' + retroIconFromKey(msRiskKey) + '</span>';
@@ -742,17 +868,57 @@
                     h += '<span class="retro-ms-text" data-idx="' + m + '">' + msText + '</span>';
                     h += '</li>';
                 }
-                h += '</ul></td>';
+                /* Also render any user-added milestones (add-0, add-1, …) */
+                if (ov.milestones) {
+                    var addIdx = 0;
+                    while (ov.milestones['add-' + addIdx] !== undefined) {
+                        var addText = ov.milestones['add-' + addIdx];
+                        var addRisk = (ov.milestoneRisks && ov.milestoneRisks['add-' + addIdx]) || '';
+                        if (addText.trim() !== '') {
+                            msRendered++;
+                            h += '<li>';
+                            h += '<span class="retro-ms-icon-display">' + retroIconFromKey(addRisk) + '</span>';
+                            h += '<select class="retro-ms-risk-sel" data-idx="add-' + addIdx + '" hidden>';
+                            h += '<option value=""' + (addRisk === '' ? ' selected' : '') + '>&mdash;</option>';
+                            h += '<option value="green"' + (addRisk === 'green' ? ' selected' : '') + '>&#9733; Green</option>';
+                            h += '<option value="yellow"' + (addRisk === 'yellow' ? ' selected' : '') + '>&#9650; Yellow</option>';
+                            h += '<option value="red"' + (addRisk === 'red' ? ' selected' : '') + '>&#11042; Red</option>';
+                            h += '</select> ';
+                            h += '<span class="retro-ms-text" data-idx="add-' + addIdx + '">' + addText + '</span>';
+                            h += '</li>';
+                        }
+                        addIdx++;
+                    }
+                }
+                h += '</ul>';
+                h += '<button type="button" class="retro-add-ms-btn" data-id="' + row.id + '" hidden title="Add milestone">+ Add</button>';
+                h += '</td>';
 
                 /* Justification — editable text */
                 h += '<td><ul class="retro-just-list">';
+                var justRendered = 0;
                 for (var j = 0; j < row.justifications.length; j++) {
                     var justText = (ov.justifications && ov.justifications[j] !== undefined) ? ov.justifications[j] : row.justifications[j];
                     /* Skip items the user cleared */
                     if (ov.justifications && ov.justifications[j] !== undefined && justText.trim() === '') continue;
+                    justRendered++;
                     h += '<li><span class="retro-just-text" data-idx="' + j + '">' + (justText || '') + '</span></li>';
                 }
-                h += '</ul></td>';
+                /* Also render any user-added justifications */
+                if (ov.justifications) {
+                    var addJIdx = 0;
+                    while (ov.justifications['add-' + addJIdx] !== undefined) {
+                        var addJText = ov.justifications['add-' + addJIdx];
+                        if (addJText.trim() !== '') {
+                            justRendered++;
+                            h += '<li><span class="retro-just-text" data-idx="add-' + addJIdx + '">' + addJText + '</span></li>';
+                        }
+                        addJIdx++;
+                    }
+                }
+                h += '</ul>';
+                h += '<button type="button" class="retro-add-just-btn" data-id="' + row.id + '" hidden title="Add justification">+ Add</button>';
+                h += '</td>';
 
                 h += '</tr>';
             }
@@ -761,6 +927,9 @@
 
             $retroContent.innerHTML = h;
             if ($retroEmpty) $retroEmpty.hidden = true;
+
+            /* Paginate into multiple slides if content overflows in slide-fit mode */
+            if (retroSlideFit) retroPaginate();
 
             /* Wire buttons */
             $retroContent.querySelector('.retro-edit-btn').addEventListener('click', retroToggleEdit);

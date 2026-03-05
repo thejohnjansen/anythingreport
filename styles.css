@@ -467,6 +467,37 @@ nav span {
     font-size: 12px;
 }
 
+/* Add-item buttons inside retro cells */
+.retro-add-ms-btn[hidden],
+.retro-add-just-btn[hidden] {
+    display: none !important;
+}
+.retro-add-ms-btn,
+.retro-add-just-btn {
+    display: inline-block;
+    margin-top: 4px;
+    padding: 2px 8px;
+    background: transparent;
+    border: 1px dashed #bbb;
+    border-radius: 4px;
+    color: var(--accent);
+    font-size: 11px;
+    font-weight: 600;
+    cursor: pointer;
+    transition: all 0.12s;
+}
+.retro-add-ms-btn:hover,
+.retro-add-just-btn:hover {
+    background: #eef4fb;
+    border-color: var(--accent);
+}
+.retro-slide-fit .retro-add-ms-btn,
+.retro-slide-fit .retro-add-just-btn {
+    font-size: 9px;
+    padding: 1px 5px;
+    margin-top: 2px;
+}
+
 /* Retro header + edit button */
 .retro-header {
     display: flex;
@@ -574,6 +605,19 @@ nav span {
 }
 .retro-slide-fit .retro-th-rag { width: 50px; }
 .retro-slide-fit .retro-th-fa  { width: 90px; }
+
+/* ── Paginated slide-fit: spacing & page indicator ────────────── */
+.retro-slide-fit + .retro-slide-fit {
+    margin-top: 32px;
+}
+.retro-page-indicator {
+    text-align: right;
+    font-size: 10px;
+    color: #999;
+    margin-bottom: 4px;
+    flex-shrink: 0;
+    line-height: 1;
+}
 
 /* ── Doc view ─────────────────────────────────────────────────── */
 

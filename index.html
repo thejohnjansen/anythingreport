@@ -603,6 +603,23 @@
 
         var lastRetroRows = null;
         var lastRetroLinkBase = '';
+        var retroSortCol = '';   /* 'rag', 'fa', 'mission' or '' */
+        var retroSortDir = 1;   /* 1 = asc, -1 = desc */
+
+        function retroSort(col) {
+            /* Save any in-progress edits before re-rendering */
+            if (retroEditing) {
+                retroSaveOverrides();
+                retroEditing = false;
+            }
+            if (retroSortCol === col) {
+                retroSortDir = -retroSortDir;
+            } else {
+                retroSortCol = col;
+                retroSortDir = 1;
+            }
+            renderRetroFromCache();
+        }
 
         function renderRetroFromCache() {
             if (lastRetroRows) renderRetro(lastRetroRows, lastRetroLinkBase);
@@ -623,20 +640,62 @@
             h += '<button type="button" class="retro-fit-btn' + (retroSlideFit ? ' active' : '') + '">&#9634; Slide Fit</button>';
             h += '<button type="button" class="retro-edit-btn">&#9998; Edit</button>';
             h += '</div>';
+            var ragOrder = { 'red': 0, 'yellow': 1, 'green': 2, '': 3 };
+            function sortArrow(col) {
+                if (retroSortCol !== col) return ' <span class="retro-sort-arrow">&#8597;</span>';
+                return retroSortDir === 1
+                    ? ' <span class="retro-sort-arrow retro-sort-active">&#9650;</span>'
+                    : ' <span class="retro-sort-arrow retro-sort-active">&#9660;</span>';
+            }
+
             h += '<table class="retro-table"><thead><tr>';
-            h += '<th class="retro-th-rag">RAG</th>';
-            h += '<th class="retro-th-fa">Feature Area</th>';
-            h += '<th>Mission</th>';
+            h += '<th class="retro-th-rag retro-th-sort" data-sort="rag">RAG' + sortArrow('rag') + '</th>';
+            h += '<th class="retro-th-fa retro-th-sort" data-sort="fa">Feature Area' + sortArrow('fa') + '</th>';
+            h += '<th class="retro-th-sort" data-sort="mission">Mission' + sortArrow('mission') + '</th>';
             h += '<th>Milestones</th>';
             h += '<th>Justification</th>';
             h += '</tr></thead><tbody>';
 
+            /* Build sortable row data */
+            var sortable = [];
             for (var i = 0; i < rows.length; i++) {
                 var row = rows[i];
                 var ov = saved[row.id] || {};
                 var rag = ov.rag || '';
                 var fa = ov.featureArea || '';
                 var mission = ov.mission || row.mission;
+                sortable.push({ row: row, ov: ov, rag: rag, fa: fa, mission: mission });
+            }
+
+            if (retroSortCol) {
+                function stripBracketPrefix(s) {
+                    return (s || '').replace(/^\[/, '').toLowerCase();
+                }
+                sortable.sort(function(a, b) {
+                    var va, vb;
+                    if (retroSortCol === 'rag') {
+                        va = ragOrder[a.rag] !== undefined ? ragOrder[a.rag] : 3;
+                        vb = ragOrder[b.rag] !== undefined ? ragOrder[b.rag] : 3;
+                    } else if (retroSortCol === 'fa') {
+                        va = (a.fa || '').toLowerCase();
+                        vb = (b.fa || '').toLowerCase();
+                    } else {
+                        va = stripBracketPrefix(a.mission);
+                        vb = stripBracketPrefix(b.mission);
+                    }
+                    if (typeof va === 'string') return va.localeCompare(vb) * retroSortDir;
+                    if (va < vb) return -1 * retroSortDir;
+                    if (va > vb) return  1 * retroSortDir;
+                    return 0;
+                });
+            }
+
+            for (var si = 0; si < sortable.length; si++) {
+                var row = sortable[si].row;
+                var ov = sortable[si].ov;
+                var rag = sortable[si].rag;
+                var fa = sortable[si].fa;
+                var mission = sortable[si].mission;
 
                 h += '<tr data-retro-id="' + row.id + '" data-rag="' + rag + '">';
 
@@ -706,6 +765,11 @@
             /* Wire buttons */
             $retroContent.querySelector('.retro-edit-btn').addEventListener('click', retroToggleEdit);
             $retroContent.querySelector('.retro-fit-btn').addEventListener('click', retroToggleFit);
+
+            /* Wire sortable headers */
+            $retroContent.querySelectorAll('.retro-th-sort').forEach(function(th) {
+                th.addEventListener('click', function() { retroSort(th.dataset.sort); });
+            });
         }
 
         /* ── Fetch data on Run ──────────────────────────────────── */

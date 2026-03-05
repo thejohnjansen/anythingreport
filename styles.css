@@ -374,6 +374,12 @@ nav span {
 .retro-th-rag { width: 70px; text-align: center !important; }
 .retro-th-fa  { width: 130px; }
 
+/* Sortable headers */
+.retro-th-sort { cursor: pointer; user-select: none; }
+.retro-th-sort:hover { background: #edf0f4; }
+.retro-sort-arrow { font-size: 9px; color: #bbb; vertical-align: middle; }
+.retro-sort-active { color: var(--accent); }
+
 .retro-table td {
     padding: 10px 8px;
     border-bottom: 1px solid #eee;

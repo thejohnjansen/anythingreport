@@ -79,6 +79,9 @@ header button {
 header button:hover  { background: #106ebe; }
 header button:disabled { opacity: 0.5; cursor: wait; }
 
+#pptxBtn { background: #217346; }
+#pptxBtn:hover { background: #1a5c38; }
+
 /* ── View toggle ──────────────────────────────────────────────── */
 
 .view-toggle {

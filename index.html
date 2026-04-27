@@ -22,6 +22,7 @@
             <input type="date" id="midpointDate"
                    title="Midpoint date (optional) — snapshot risk fields from this date">
             <button type="submit" id="runBtn">&#9654; Run</button>
+            <button type="button" id="pptxBtn" hidden title="Download as PowerPoint">&#8595; PPTX</button>
         </form>
     </header>
 
@@ -95,6 +96,7 @@
         const $retroContent = document.getElementById('retroContent');
         const $retroEmpty   = document.getElementById('retroEmpty');
         const $fmtBar     = document.getElementById('fmtBar');
+        const $pptxBtn    = document.getElementById('pptxBtn');
 
         /* Restore saved inputs */
         $query.value   = localStorage.getItem('ar_query') || '';
@@ -996,6 +998,7 @@
                 renderSlides(slideData.slides);
                 renderRetro(retroData.rows, retroData.linkBase || linkBase);
                 renderDoc(docData.sections, docData.linkBase || linkBase);
+                $pptxBtn.hidden = false;
             } catch (err) {
                 alert('Error: ' + err.message);
             } finally {
@@ -1005,9 +1008,19 @@
             }
         };
 
+        // Expose live state that the external PPTX script reads at click-time.
+        window.__arPptxState = {
+            getHasMidpoint: function () { return hasMidpoint; },
+            getLastSlides: function () { return lastSlides || []; },
+            getPipelineStages: function () { return PL_STAGES; },
+            loadPipeline: function () { return plLoad(); }
+        };
+
         /* Show Top-of-Mind + Pipeline immediately (no data needed) */
         renderSlides([]);
     </script>
 
+    <script src="https://cdn.jsdelivr.net/npm/pptxgenjs@3/dist/pptxgen.bundle.js"></script>
+    <script src="pptx-export.js"></script>
 </body>
 </html>

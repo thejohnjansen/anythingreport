@@ -79,9 +79,6 @@ header button {
 header button:hover  { background: #106ebe; }
 header button:disabled { opacity: 0.5; cursor: wait; }
 
-#pptxBtn { background: #217346; }
-#pptxBtn:hover { background: #1a5c38; }
-
 /* ── View toggle ──────────────────────────────────────────────── */
 
 .view-toggle {
@@ -378,7 +375,7 @@ nav span {
 .retro-th-fa  { width: 130px; }
 
 /* Sortable headers */
-.retro-th-sort { cursor: pointer; user-select: none; }
+.retro-th-sort { cursor: pointer; -webkit-user-select: none; user-select: none; }
 .retro-th-sort:hover { background: #edf0f4; }
 .retro-sort-arrow { font-size: 9px; color: #bbb; vertical-align: middle; }
 .retro-sort-active { color: var(--accent); }
@@ -1017,7 +1014,7 @@ nav span {
     grid-template-columns: 170px repeat(6, 1fr);
     margin-bottom: 2px;
 }
-.pv-corner { /* empty top-left cell */ }
+
 .pv-col-hdr {
     text-align: center;
     font-size: 10px;

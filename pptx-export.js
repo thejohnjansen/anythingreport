@@ -57,8 +57,9 @@
         var pres = new PptxGenJS();
         pres.layout = 'LAYOUT_WIDE'; // 13.33 x 7.5 inches
         var PPT_X = 0.05;
-        var PPT_W = 12;
+        var PPT_W = 13;
         var TABLE_TOP_Y = 1.5;
+        var WORKITEM_LINK_BASE = 'https://microsoft.visualstudio.com/Edge/_workitems/edit/';
 
         // Slide 1: Top of Mind
         var s1 = pres.addSlide();
@@ -143,7 +144,7 @@
                         y: 1.2,
                         w: PPT_W,
                         h: 0.5,
-                        fontSize: 13,
+                        fontSize: 12,
                         color: '888888',
                         italic: true,
                         fontFace: 'Segoe UI'
@@ -154,8 +155,8 @@
                 var cols;
                 var colW;
                 if (hasMidpoint) {
-                    cols = ['ID', 'Title', 'Midpoint Riosk', 'Midpoint Details', 'Final Risk', 'Final Details'];
-                    colW = [1, 2, 1, 3.5, 1, 3.5];
+                    cols = ['ID', 'Title', 'Midpoint Risk', 'Midpoint Details', 'Final Risk', 'Final Details'];
+                    colW = [1, 3.5, 1, 3.5, 1, 3.5];
                 } else {
                     cols = ['ID', 'Title', 'Risk', 'Details'];
                     colW = [1, 4, 1, 6];
@@ -167,9 +168,21 @@
 
                 var tblRows = sd.items.map(function (it, idx) {
                     var bg = (idx % 2 === 0) ? 'F8FAFC' : 'FFFFFF';
+                    var idCell = {
+                        text: String(it.id),
+                        options: {
+                            fontSize: 12,
+                            color: '0078d4',
+                            underline: false,
+                            fill: { color: bg },
+                            align: 'center',
+                            valign: 'middle',
+                            hyperlink: { url: WORKITEM_LINK_BASE + it.id }
+                        }
+                    };
                     if (hasMidpoint) {
                         return [
-                            { text: String(it.id), options: { fontSize: 10, color: '0078d4', fill: { color: bg } } },
+                            idCell,
                             { text: it.title, options: { fontSize: 10, color: '1F2937', fill: { color: bg } } },
                             { text: riskLabel(it.midpointRisk), options: { fontSize: 10, bold: true, color: riskColor(it.midpointRisk), fill: { color: bg } } },
                             { text: it.midpointComment || '\u2014', options: { fontSize: 9, color: '4B5563', fill: { color: bg } } },
@@ -178,7 +191,7 @@
                         ];
                     }
                     return [
-                        { text: String(it.id), options: { fontSize: 10, color: '0078d4', fill: { color: bg } } },
+                        idCell,
                         { text: it.title, options: { fontSize: 10, color: '1F2937', fill: { color: bg } } },
                         { text: riskLabel(it.risk), options: { fontSize: 10, bold: true, color: riskColor(it.risk), fill: { color: bg } } },
                         { text: it.riskComment || '\u2014', options: { fontSize: 9, color: '4B5563', fill: { color: bg } } }

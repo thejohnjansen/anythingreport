@@ -1089,6 +1089,21 @@ nav span {
     margin-bottom: -2px;
 }
 
+/* Warning marker appears on the connector, just left of the selected node. */
+.pv-warn {
+    position: absolute;
+    /* Node is 34px wide, so left edge is 17px from center; place icon ~10px left of that. */
+    left: calc(50% - 40px);
+    top: 35%;
+    transform: translate(-50%, -50%);
+    z-index: 2;
+    font-size: 32px;
+    font-family: 'Segoe UI Emoji', 'Apple Color Emoji', 'Noto Color Emoji', sans-serif;
+    line-height: 1;
+    text-shadow: 0 0 1px rgba(0, 0, 0, 0.15);
+    pointer-events: none;
+}
+
 /* Circles */
 .pv-node {
     width: 34px;
@@ -1153,7 +1168,8 @@ nav span {
 .pe-topic:focus, .pe-stage:focus { border-color: var(--accent); }
 .pe-topic { min-width: 100px; }
 .pe-stage { min-width: 50px; }
-.pe-here {
+.pe-here,
+.pe-warn {
     padding: 4px 2px;
     border: 1px solid #ddd;
     border-radius: 4px;

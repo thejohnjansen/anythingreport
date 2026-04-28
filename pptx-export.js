@@ -170,6 +170,13 @@
         };
     }
 
+    function normalizePipelineStageValue(value) {
+        var v = (value || '').trim();
+        var lower = v.toLowerCase();
+        if (lower === 'complete' || lower === 'completed') return 'complete';
+        return v;
+    }
+
     function downloadPptx() {
         var state = getState();
         var hasMidpoint = state.hasMidpoint;
@@ -211,38 +218,204 @@
         var s2 = pres.addSlide();
         pptxSlideHeader(s2, plTitle);
         if (plData && plData.rows && plData.rows.length > 0) {
-            var plHdrCells = [{ text: 'Topic', options: { bold: true, color: 'FFFFFF', fill: { color: '16213E' }, fontSize: 10, align: 'center', valign: 'middle' } }];
-            for (var ps = 0; ps < PL_STAGES.length; ps++) {
-                plHdrCells.push({ text: PL_STAGES[ps], options: { bold: true, color: 'FFFFFF', fill: { color: '16213E' }, fontSize: 10, align: 'center', valign: 'middle' } });
-            }
-            plHdrCells.push({ text: 'Here', options: { bold: true, color: 'FFFFFF', fill: { color: '16213E' }, fontSize: 10, align: 'center', valign: 'middle' } });
+            var plHeaders = ['INVESTIGATE', 'EXPLAINER /\nDESIGN DOC', 'IMPLEMENTATION', 'DEV TRIAL', 'ORIGIN TRIAL /\nCFR', 'SHIP'];
 
-            var plDataRows = plData.rows.map(function (row) {
-                var cells = [{ text: row.topic || '', options: { fontSize: 10, color: '222222', fill: { color: 'F8FAFC' } } }];
-                for (var sc = 0; sc < 6; sc++) {
-                    var isHere = (row.hereCol === sc);
-                    cells.push({
-                        text: row.stages[sc] || '',
-                        options: {
-                            fontSize: 10,
-                            color: '222222',
-                            bold: isHere,
-                            fill: { color: isHere ? 'DBEAFE' : 'F8FAFC' }
+            var chartX = 0.55;
+            var chartY = 1.35;
+            var chartW = 12.2;
+            var chartH = 5.85;
+            var topicW = 2.05;
+            var stageW = chartW - topicW;
+            var stageColW = stageW / 6;
+
+            // Legend at top-right in two stacked columns.
+            var legendX = chartX + chartW - 4.9;
+            var legendY = 0.25;
+            var legendColGap = 2.45;
+            var legendRowH = 0.22;
+            var legendSymbolW = 0.24;
+            var legendTextW = 2.25;
+
+            function addLegendItem(col, row, symbol, text, opts) {
+                var lx = legendX + col * legendColGap;
+                var ly = legendY + row * legendRowH;
+                if (opts.symbolType === 'dotFilled' || opts.symbolType === 'dotOpen') {
+                    var d = opts.symbolDiameter || 0.14;
+                    s2.addShape(pres.ShapeType.ellipse, {
+                        x: lx + (legendSymbolW - d) / 2,
+                        y: ly + 0.03,
+                        w: d,
+                        h: d,
+                        line: {
+                            color: opts.symbolColor,
+                            pt: opts.symbolType === 'dotOpen' ? 1.8 : 1.2
+                        },
+                        fill: {
+                            color: opts.symbolType === 'dotFilled' ? opts.symbolColor : 'FFFFFF'
                         }
                     });
+                } else {
+                    s2.addText(symbol, {
+                        x: lx,
+                        y: ly,
+                        w: legendSymbolW,
+                        h: 0.2,
+                        align: 'center',
+                        valign: 'mid',
+                        fontSize: opts.symbolSize,
+                        bold: !!opts.symbolBold,
+                        color: opts.symbolColor,
+                        fontFace: opts.symbolFont || 'Segoe UI'
+                    });
                 }
-                cells.push({ text: row.hereCol >= 0 ? PL_STAGES[row.hereCol] : '\u2014', options: { fontSize: 10, color: '555555', fill: { color: 'F8FAFC' } } });
-                return cells;
-            });
+                s2.addText(text, {
+                    x: lx + legendSymbolW + 0.04,
+                    y: ly,
+                    w: legendTextW,
+                    h: 0.2,
+                    fontSize: 9,
+                    color: '4B5563',
+                    fontFace: 'Segoe UI'
+                });
+            }
 
-            s2.addTable([plHdrCells].concat(plDataRows), {
-                x: PPT_X,
-                y: TABLE_TOP_Y,
-                w: PPT_W,
-                border: { type: 'solid', pt: 1, color: 'D1D5DB' },
-                rowH: 0.5,
-                colW: [2.5, 1.4, 1.4, 1.4, 1.4, 1.4, 1.4, 2.0]
-            });
+            addLegendItem(0, 0, '\u25BC', 'Roughly where we are', { symbolSize: 11, symbolBold: true, symbolColor: '2A8E2A' });
+            addLegendItem(0, 1, '\u26A0\uFE0F', 'Risk Identified', { symbolSize: 12, symbolColor: 'D97706', symbolFont: 'Segoe UI Emoji' });
+            addLegendItem(1, 0, '', 'Completed', { symbolType: 'dotFilled', symbolColor: '2A8E2A', symbolDiameter: 0.16 });
+            addLegendItem(1, 1, '', 'Committed for the current cycle', { symbolType: 'dotOpen', symbolColor: '2A8E2A', symbolDiameter: 0.16 });
+            addLegendItem(1, 2, '', 'Planned for a future cycle', { symbolType: 'dotOpen', symbolColor: '9CA3AF', symbolDiameter: 0.16 });
+
+            var headerY = chartY + 0.72;
+            for (var ph = 0; ph < 6; ph++) {
+                s2.addText(plHeaders[ph], {
+                    x: chartX + topicW + ph * stageColW,
+                    y: headerY,
+                    w: stageColW,
+                    h: 0.36,
+                    align: 'center',
+                    valign: 'mid',
+                    bold: true,
+                    fontSize: 9,
+                    color: '666666',
+                    fontFace: 'Segoe UI'
+                });
+            }
+
+            var rows = plData.rows || [];
+            var rowStartY = headerY + 0.44;
+            var rowGap = 0.18;
+            var availForRows = chartH - (rowStartY - chartY) - (rows.length - 1) * rowGap;
+            // ~50px at 96dpi is about 0.52in; cap row height there to avoid oversized rows.
+            var rowH = Math.min(0.58, availForRows / Math.max(rows.length, 1));
+            var nodeD = Math.min(0.54, rowH * 0.92);
+
+            for (var r = 0; r < rows.length; r++) {
+                var row = rows[r];
+                var rowY = rowStartY + r * (rowH + rowGap);
+                var centerY = rowY + rowH * 0.5;
+
+                s2.addShape(pres.ShapeType.roundRect, {
+                    x: chartX,
+                    y: rowY + rowH * 0.10,
+                    w: topicW - 0.18,
+                    h: rowH * 0.80,
+                    rectRadius: 0.05,
+                    line: { color: 'DDDDDD', pt: 1 },
+                    fill: { color: 'DDDDDD' }
+                });
+                s2.addText(row.topic || '', {
+                    x: chartX + 0.06,
+                    y: rowY + rowH * 0.18,
+                    w: topicW - 0.30,
+                    h: rowH * 0.64,
+                    align: 'center',
+                    valign: 'mid',
+                    bold: true,
+                    fontSize: 10,
+                    color: '333333',
+                    fontFace: 'Segoe UI'
+                });
+
+                s2.addShape(pres.ShapeType.line, {
+                    x: chartX + topicW - 0.18,
+                    y: centerY,
+                    w: (chartX + topicW + stageColW * 5.5 + nodeD * 0.5) - (chartX + topicW - 0.18),
+                    h: 0,
+                    line: { color: '999999', pt: 4.5 }
+                });
+
+                for (var sc = 0; sc < 6; sc++) {
+                    var cx = chartX + topicW + stageColW * (sc + 0.5);
+                    var v = normalizePipelineStageValue((row.stages && row.stages[sc]) || '');
+                    var isHere = row.hereCol === sc;
+                    var isWarn = row.warnCol === sc;
+                    var isDone = v === 'complete';
+
+                    if (isHere) {
+                        s2.addText('\u25BC', {
+                            x: cx - 0.08,
+                            y: centerY - nodeD * 0.70,
+                            w: 0.16,
+                            h: 0.18,
+                            align: 'center',
+                            color: '2A8E2A',
+                            bold: true,
+                            fontSize: 15,
+                            fontFace: 'Segoe UI'
+                        });
+                    }
+
+                    if (isWarn) {
+                        s2.addText('\u26A0\uFE0F', {
+                            x: cx - nodeD * 0.5 - 0.24,
+                            y: centerY - 0.12,
+                            w: 0.22,
+                            h: 0.22,
+                            align: 'center',
+                            valign: 'mid',
+                            fontSize: 17,
+                            fontFace: 'Segoe UI Emoji'
+                        });
+                    }
+
+                    if (isDone) {
+                        s2.addShape(pres.ShapeType.ellipse, {
+                            x: cx - nodeD * 0.5,
+                            y: centerY - nodeD * 0.5,
+                            w: nodeD,
+                            h: nodeD,
+                            line: { color: '2A8E2A', pt: 1.5 },
+                            fill: { color: '2A8E2A' }
+                        });
+                        continue;
+                    }
+
+                    if (v) {
+                        var committed = row.hereCol >= 0 && sc <= row.hereCol;
+                        s2.addShape(pres.ShapeType.ellipse, {
+                            x: cx - nodeD * 0.5,
+                            y: centerY - nodeD * 0.5,
+                            w: nodeD,
+                            h: nodeD,
+                            line: { color: committed ? '2A8E2A' : 'AAAAAA', pt: 2 },
+                            fill: { color: 'FFFFFF' }
+                        });
+                        s2.addText(v, {
+                            x: cx - nodeD * 0.5 + 0.01,
+                            y: centerY - nodeD * 0.5 + 0.01,
+                            w: nodeD - 0.02,
+                            h: nodeD - 0.02,
+                            align: 'center',
+                            valign: 'mid',
+                            fit: 'shrink',
+                            fontSize: 7,
+                            bold: true,
+                            color: committed ? '333333' : '666666',
+                            fontFace: 'Segoe UI'
+                        });
+                    }
+                }
+            }
         } else {
             s2.addText('No pipeline data \u2014 use the \u270e Edit button in the web view to add rows.', {
                 x: PPT_X,

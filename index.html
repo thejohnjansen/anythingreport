@@ -194,6 +194,13 @@
         function plLoad() { try { return JSON.parse(localStorage.getItem('ar_pipeline')); } catch(e) { return null; } }
         function plSave(d) { localStorage.setItem('ar_pipeline', JSON.stringify(d)); }
 
+        function normalizePipelineStageValue(value) {
+            var v = (value || '').trim();
+            var lower = v.toLowerCase();
+            if (lower === 'complete' || lower === 'completed') return 'complete';
+            return v;
+        }
+
         function plVizHTML(pl) {
             if (!pl || !pl.rows || !pl.rows.length)
                 return '<p class="pv-empty">Click <b>&#9998; Edit</b> to add pipeline rows.</p>';
@@ -210,12 +217,14 @@
                 h += '<div class="pv-row"><div class="pv-topic"><span>' + (row.topic || '') + '</span></div>';
                 h += '<div class="pv-stages"><div class="pv-line"></div>';
                 for (var c = 0; c < 6; c++) {
-                    var v = (row.stages && row.stages[c] || '').trim();
+                    var v = normalizePipelineStageValue(row.stages && row.stages[c] || '');
                     var here = (row.hereCol === c);
-                    var done = (v.toLowerCase() === 'complete');
+                    var warn = (row.warnCol === c);
+                    var done = (v === 'complete');
                     var empty = (v === '');
                     h += '<div class="pv-cell">';
                     if (here) h += '<div class="pv-arrow">&#9660;</div>';
+                    if (warn) h += '<div class="pv-warn" title="Watch item">&#9888;&#65039;</div>';
                     if (done) {
                         h += '<div class="pv-node complete"></div>';
                     } else if (!empty) {
@@ -231,7 +240,7 @@
         }
 
         function plEditorRowHTML(rd) {
-            rd = rd || { topic: '', stages: ['','','','','',''], hereCol: -1 };
+            rd = rd || { topic: '', stages: ['','','','','',''], hereCol: -1, warnCol: -1 };
             var h = '<tr class="pe-row"><td><input type="text" class="pe-topic" value="' +
                 (rd.topic || '').replace(/"/g, '&quot;') + '" placeholder="Topic name"></td>';
             for (var s = 0; s < 6; s++)
@@ -241,6 +250,10 @@
                 (rd.hereCol < 0 ? ' selected' : '') + '>&mdash;</option>';
             for (var s = 0; s < PL_STAGES.length; s++)
                 h += '<option value="' + s + '"' + (rd.hereCol === s ? ' selected' : '') + '>' + PL_STAGES[s] + '</option>';
+            h += '</select></td><td><select class="pe-warn"><option value="-1"' +
+                ((rd.warnCol === undefined || rd.warnCol < 0) ? ' selected' : '') + '>&mdash;</option>';
+            for (var s = 0; s < PL_STAGES.length; s++)
+                h += '<option value="' + s + '"' + (rd.warnCol === s ? ' selected' : '') + '>' + PL_STAGES[s] + '</option>';
             h += '</select></td><td><button type="button" class="pe-remove" title="Remove">&times;</button></td></tr>';
             return h;
         }
@@ -249,7 +262,7 @@
             var d = pl || { title: 'Pipeline', rows: [] };
             var h = '<table class="pe-table"><thead><tr><th class="pe-th-topic">Topic</th>';
             for (var s = 0; s < PL_STAGES.length; s++) h += '<th>' + PL_STAGES[s] + '</th>';
-            h += '<th>Here</th><th></th></tr></thead><tbody id="peRows">';
+            h += '<th>Here</th><th>Warn</th><th></th></tr></thead><tbody id="peRows">';
             for (var r = 0; r < d.rows.length; r++) h += plEditorRowHTML(d.rows[r]);
             h += '</tbody></table>';
             h += '<div class="pe-actions"><button type="button" class="pe-add" id="peAdd">+ Add Row</button>';
@@ -262,8 +275,15 @@
             editorEl.querySelectorAll('.pe-row').forEach(function(tr) {
                 var topic = tr.querySelector('.pe-topic').value;
                 var stages = [];
-                tr.querySelectorAll('.pe-stage').forEach(function(inp) { stages.push(inp.value); });
-                pl.rows.push({ topic: topic, stages: stages, hereCol: parseInt(tr.querySelector('.pe-here').value, 10) });
+                tr.querySelectorAll('.pe-stage').forEach(function(inp) {
+                    stages.push(normalizePipelineStageValue(inp.value));
+                });
+                pl.rows.push({
+                    topic: topic,
+                    stages: stages,
+                    hereCol: parseInt(tr.querySelector('.pe-here').value, 10),
+                    warnCol: parseInt(tr.querySelector('.pe-warn').value, 10)
+                });
             });
             plSave(pl);
             vizEl.innerHTML = plVizHTML(pl);

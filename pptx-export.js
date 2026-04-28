@@ -183,7 +183,6 @@
         var PPT_W = 13;
         var TABLE_TOP_Y = 1.5;
         var TABLE_ROW_H = 0.5;
-        var DATA_ROWS_PER_SLIDE = 12;
         var WORKITEM_LINK_BASE = 'https://microsoft.visualstudio.com/Edge/_workitems/edit/';
 
         // Slide 1: Top of Mind
@@ -322,12 +321,23 @@
                     ];
                 });
 
-                for (var start = 0; start < sd.items.length; start += DATA_ROWS_PER_SLIDE) {
-                    var pageItems = sd.items.slice(start, start + DATA_ROWS_PER_SLIDE);
-                    var pageRows = tblRows.slice(start, start + DATA_ROWS_PER_SLIDE);
-                    var pageSlide = (start === 0) ? fs : pres.addSlide();
+                var pageSizes;
+                if (sd.items.length <= 8) {
+                    pageSizes = [sd.items.length];
+                } else if (sd.items.length <= 13) {
+                    pageSizes = [5, sd.items.length - 5];
+                } else {
+                    pageSizes = [5, 5, sd.items.length - 10];
+                }
 
-                    if (start > 0) {
+                var start = 0;
+                for (var p = 0; p < pageSizes.length; p++) {
+                    var size = pageSizes[p];
+                    var pageItems = sd.items.slice(start, start + size);
+                    var pageRows = tblRows.slice(start, start + size);
+                    var pageSlide = (p === 0) ? fs : pres.addSlide();
+
+                    if (p > 0) {
                         pptxSlideHeader(pageSlide, sd.title + ' (cont.)');
                     }
 
@@ -352,6 +362,8 @@
                             hyperlink: { url: WORKITEM_LINK_BASE + pageItems[r].id }
                         });
                     }
+
+                    start += size;
                 }
             }
         }

@@ -56,9 +56,11 @@
 
         var pres = new PptxGenJS();
         pres.layout = 'LAYOUT_WIDE'; // 13.33 x 7.5 inches
-        var PPT_X = 0.05;
+        var PPT_X = 0.2;
         var PPT_W = 13;
         var TABLE_TOP_Y = 1.5;
+        var TABLE_ROW_H = 0.5;
+        var DATA_ROWS_PER_SLIDE = 12;
         var WORKITEM_LINK_BASE = 'https://microsoft.visualstudio.com/Edge/_workitems/edit/';
 
         // Slide 1: Top of Mind
@@ -141,7 +143,7 @@
                 if (sd.items.length === 0) {
                     fs.addText('No child items', {
                         x: PPT_X,
-                        y: 1.2,
+                        y: TABLE_TOP_Y,
                         w: PPT_W,
                         h: 0.5,
                         fontSize: 12,
@@ -156,14 +158,14 @@
                 var colW;
                 if (hasMidpoint) {
                     cols = ['ID', 'Title', 'Midpoint Risk', 'Midpoint Details', 'Final Risk', 'Final Details'];
-                    colW = [1, 3.5, 1, 3.5, 1, 3.5];
+                    colW = [1, 3.5, 1, 3.23, 1, 3.22];
                 } else {
                     cols = ['ID', 'Title', 'Risk', 'Details'];
                     colW = [1, 4, 1, 6];
                 }
 
                 var tblHdr = cols.map(function (c) {
-                    return { text: c, options: { bold: true, color: 'FFFFFF', fill: { color: '16213E' }, fontSize: 11, align: 'center', valign: 'middle' } };
+                    return { text: c, options: { bold: true, color: 'FFFFFF', fill: { color: '16213E' }, fontSize: 10, align: 'center', valign: 'middle' } };
                 });
 
                 var tblRows = sd.items.map(function (it, idx) {
@@ -171,13 +173,11 @@
                     var idCell = {
                         text: String(it.id),
                         options: {
-                            fontSize: 12,
+                            fontSize: 10,
                             color: '0078d4',
-                            underline: false,
                             fill: { color: bg },
                             align: 'center',
-                            valign: 'middle',
-                            hyperlink: { url: WORKITEM_LINK_BASE + it.id }
+                            valign: 'middle'
                         }
                     };
                     if (hasMidpoint) {
@@ -185,30 +185,50 @@
                             idCell,
                             { text: it.title, options: { fontSize: 10, color: '1F2937', fill: { color: bg } } },
                             { text: riskLabel(it.midpointRisk), options: { fontSize: 10, bold: true, color: riskColor(it.midpointRisk), fill: { color: bg } } },
-                            { text: it.midpointComment || '\u2014', options: { fontSize: 9, color: '4B5563', fill: { color: bg } } },
+                            { text: it.midpointComment || '\u2014', options: { fontSize: 10, color: '4B5563', fill: { color: bg } } },
                             { text: riskLabel(it.risk), options: { fontSize: 10, bold: true, color: riskColor(it.risk), fill: { color: bg } } },
-                            { text: it.riskComment || '\u2014', options: { fontSize: 9, color: '4B5563', fill: { color: bg } } }
+                            { text: it.riskComment || '\u2014', options: { fontSize: 10, color: '4B5563', fill: { color: bg } } }
                         ];
                     }
                     return [
                         idCell,
                         { text: it.title, options: { fontSize: 10, color: '1F2937', fill: { color: bg } } },
                         { text: riskLabel(it.risk), options: { fontSize: 10, bold: true, color: riskColor(it.risk), fill: { color: bg } } },
-                        { text: it.riskComment || '\u2014', options: { fontSize: 9, color: '4B5563', fill: { color: bg } } }
+                        { text: it.riskComment || '\u2014', options: { fontSize: 10, color: '4B5563', fill: { color: bg } } }
                     ];
                 });
 
-                fs.addTable([tblHdr].concat(tblRows), {
-                    x: PPT_X,
-                    y: TABLE_TOP_Y,
-                    w: PPT_W,
-                    border: { type: 'solid', pt: 0.5, color: 'D1D5DB' },
-                    rowH: 0.5,
-                    colW: colW,
-                    autoPage: true,
-                    autoPageRepeatHeader: true,
-                    autoPageSlideStartY: TABLE_TOP_Y
-                });
+                for (var start = 0; start < sd.items.length; start += DATA_ROWS_PER_SLIDE) {
+                    var pageItems = sd.items.slice(start, start + DATA_ROWS_PER_SLIDE);
+                    var pageRows = tblRows.slice(start, start + DATA_ROWS_PER_SLIDE);
+                    var pageSlide = (start === 0) ? fs : pres.addSlide();
+
+                    if (start > 0) {
+                        pptxSlideHeader(pageSlide, sd.title + ' (cont.)');
+                    }
+
+                    pageSlide.addTable([tblHdr].concat(pageRows), {
+                        x: PPT_X,
+                        y: TABLE_TOP_Y,
+                        w: PPT_W,
+                        border: { type: 'solid', pt: 0.5, color: 'D1D5DB' },
+                        rowH: TABLE_ROW_H,
+                        colW: colW
+                    });
+
+                    // Keep ID text styling plain while preserving click-through links.
+                    for (var r = 0; r < pageItems.length; r++) {
+                        pageSlide.addShape(pres.ShapeType.rect, {
+                            x: PPT_X,
+                            y: TABLE_TOP_Y + TABLE_ROW_H * (r + 1),
+                            w: colW[0],
+                            h: TABLE_ROW_H,
+                            line: { color: 'FFFFFF', transparency: 100, pt: 0 },
+                            fill: { color: 'FFFFFF', transparency: 100 },
+                            hyperlink: { url: WORKITEM_LINK_BASE + pageItems[r].id }
+                        });
+                    }
+                }
             }
         }
 

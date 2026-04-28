@@ -354,7 +354,7 @@
                     if (isHere) {
                         s2.addText('\u25BC', {
                             x: cx - 0.08,
-                            y: centerY - nodeD * 0.70,
+                            y: centerY - nodeD * 0.70 - 0.07,
                             w: 0.16,
                             h: 0.18,
                             align: 'center',
@@ -408,7 +408,7 @@
                             align: 'center',
                             valign: 'mid',
                             fit: 'shrink',
-                            fontSize: 7,
+                            fontSize: 9,
                             bold: true,
                             color: committed ? '333333' : '666666',
                             fontFace: 'Segoe UI'

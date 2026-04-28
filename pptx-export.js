@@ -5,6 +5,129 @@
         return d.textContent || d.innerText || '';
     }
 
+    function sanitizeForPpt(text) {
+        if (!text) return '';
+        // Keep all XML-valid code points, including supplementary-plane characters
+        // (emoji live here), and drop only truly invalid XML chars.
+        var out = '';
+        for (var ch of text) {
+            var cp = ch.codePointAt(0);
+            var isValidXml =
+                cp === 0x9 ||
+                cp === 0xA ||
+                cp === 0xD ||
+                (cp >= 0x20 && cp <= 0xD7FF) ||
+                (cp >= 0xE000 && cp <= 0xFFFD) ||
+                (cp >= 0x10000 && cp <= 0x10FFFF);
+            if (isValidXml) out += ch;
+        }
+        return out;
+    }
+
+    function htmlToPptRuns(html) {
+        var root = document.createElement('div');
+        root.innerHTML = html || '';
+        var runs = [];
+
+        function endsWithBreak() {
+            if (!runs.length) return false;
+            var last = runs[runs.length - 1];
+            return last.text === '' && last.options && last.options.breakLine;
+        }
+
+        function pushRun(text, fmt) {
+            var clean = sanitizeForPpt(text);
+            if (!clean) return;
+            runs.push({
+                text: clean,
+                options: {
+                    bold: !!fmt.bold,
+                    italic: !!fmt.italic,
+                    underline: !!fmt.underline
+                }
+            });
+        }
+
+        function pushBreak() {
+            // Dedicated break runs are the most reliable way to preserve
+            // author-entered hard line breaks in generated PPTX text.
+            if (!runs.length) return;
+            runs.push({ text: '', options: { breakLine: true } });
+        }
+
+        function walk(node, fmt) {
+            if (node.nodeType === Node.TEXT_NODE) {
+                var txt = (node.nodeValue || '').replace(/\r\n?/g, '\n');
+                var parts = txt.split('\n');
+                for (var pi = 0; pi < parts.length; pi++) {
+                    pushRun(parts[pi], fmt);
+                    if (pi < parts.length - 1) pushBreak();
+                }
+                return;
+            }
+            if (node.nodeType !== Node.ELEMENT_NODE) return;
+
+            var tag = node.tagName.toLowerCase();
+            var nextFmt = {
+                bold: fmt.bold,
+                italic: fmt.italic,
+                underline: fmt.underline
+            };
+
+            // If a new block starts after inline/text content, force a new line.
+            // This preserves editor intent for structures like "text + <div>...".
+            if ((tag === 'div' || tag === 'p' || tag === 'ul' || tag === 'ol') && runs.length && !endsWithBreak()) {
+                pushBreak();
+            }
+
+            if (tag === 'strong' || tag === 'b') nextFmt.bold = true;
+            if (tag === 'em' || tag === 'i') nextFmt.italic = true;
+            if (tag === 'u') nextFmt.underline = true;
+
+            if (tag === 'br') {
+                pushBreak();
+                return;
+            }
+
+            if (tag === 'li') {
+                var parentTag = node.parentElement && node.parentElement.tagName
+                    ? node.parentElement.tagName.toLowerCase()
+                    : '';
+                var marker = '\u2022 ';
+                if (parentTag === 'ol') {
+                    var idx = Array.prototype.indexOf.call(node.parentElement.children, node);
+                    marker = String(idx + 1) + '. ';
+                }
+                pushRun(marker, nextFmt);
+            }
+
+            for (var i = 0; i < node.childNodes.length; i++) {
+                walk(node.childNodes[i], nextFmt);
+            }
+
+            if (tag === 'div' || tag === 'p' || tag === 'li') {
+                pushBreak();
+            }
+        }
+
+        var baseFmt = { bold: false, italic: false, underline: false };
+        for (var i = 0; i < root.childNodes.length; i++) {
+            walk(root.childNodes[i], baseFmt);
+        }
+
+        // Avoid an extra blank line at the very end introduced by block tags.
+        while (runs.length) {
+            var last = runs[runs.length - 1];
+            if (last.text === '' && last.options && last.options.breakLine) {
+                runs.pop();
+                continue;
+            }
+            break;
+        }
+
+        return runs;
+    }
+
     function riskColor(risk) {
         var r = (risk || '').toLowerCase();
         if (r.includes('on track')) return '16A34A';
@@ -47,6 +170,32 @@
         };
     }
 
+    function logTopOfMindRuns() {
+        var tomEl = document.getElementById('tom');
+        var tomHtml = tomEl ? tomEl.innerHTML : '';
+        var tomText = tomEl ? tomEl.innerText : '';
+        var tomRuns = htmlToPptRuns(tomHtml);
+
+        var summarizedRuns = tomRuns.map(function (r, idx) {
+            return {
+                i: idx,
+                text: r.text,
+                breakLine: !!(r.options && r.options.breakLine),
+                bold: !!(r.options && r.options.bold),
+                italic: !!(r.options && r.options.italic),
+                underline: !!(r.options && r.options.underline)
+            };
+        });
+
+        console.group('Anything Report PPTX Debug: Top of Mind');
+        console.log('innerHTML:', tomHtml);
+        console.log('innerText:', tomText);
+        console.log('runCount:', tomRuns.length);
+        console.table(summarizedRuns);
+        console.log('rawRuns:', tomRuns);
+        console.groupEnd();
+    }
+
     function downloadPptx() {
         var state = getState();
         var hasMidpoint = state.hasMidpoint;
@@ -67,9 +216,10 @@
         var s1 = pres.addSlide();
         pptxSlideHeader(s1, 'Top of Mind');
         var tomEl = document.getElementById('tom');
-        var tomText = tomEl ? stripHtml(tomEl.innerHTML).trim() : '';
-        if (tomText) {
-            s1.addText(tomText, {
+        var tomHtml = tomEl ? tomEl.innerHTML : '';
+        var tomRuns = htmlToPptRuns(tomHtml);
+        if (tomRuns.length) {
+            s1.addText(tomRuns, {
                 x: PPT_X,
                 y: TABLE_TOP_Y,
                 w: PPT_W,
@@ -237,4 +387,10 @@
 
     var btn = document.getElementById('pptxBtn');
     if (btn) btn.addEventListener('click', downloadPptx);
+
+    var debugBtn = document.getElementById('pptxDebugBtn');
+    if (debugBtn) debugBtn.addEventListener('click', logTopOfMindRuns);
+
+    // Temporary manual hook for debugging in DevTools.
+    window.__arDebugPptxTopOfMind = logTopOfMindRuns;
 })();

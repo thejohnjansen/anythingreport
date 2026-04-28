@@ -23,6 +23,7 @@
                    title="Midpoint date (optional) — snapshot risk fields from this date">
             <button type="submit" id="runBtn">&#9654; Run</button>
             <button type="button" id="pptxBtn" hidden title="Download as PowerPoint">&#8595; PPTX</button>
+            <button type="button" id="pptxDebugBtn" hidden title="Log Top of Mind export debug data to console">Debug PPTX</button>
         </form>
     </header>
 
@@ -97,6 +98,7 @@
         const $retroEmpty   = document.getElementById('retroEmpty');
         const $fmtBar     = document.getElementById('fmtBar');
         const $pptxBtn    = document.getElementById('pptxBtn');
+        const $pptxDebugBtn = document.getElementById('pptxDebugBtn');
 
         /* Restore saved inputs */
         $query.value   = localStorage.getItem('ar_query') || '';
@@ -999,6 +1001,7 @@
                 renderRetro(retroData.rows, retroData.linkBase || linkBase);
                 renderDoc(docData.sections, docData.linkBase || linkBase);
                 $pptxBtn.hidden = false;
+                if ($pptxDebugBtn) $pptxDebugBtn.hidden = false;
             } catch (err) {
                 alert('Error: ' + err.message);
             } finally {

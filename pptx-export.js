@@ -170,32 +170,6 @@
         };
     }
 
-    function logTopOfMindRuns() {
-        var tomEl = document.getElementById('tom');
-        var tomHtml = tomEl ? tomEl.innerHTML : '';
-        var tomText = tomEl ? tomEl.innerText : '';
-        var tomRuns = htmlToPptRuns(tomHtml);
-
-        var summarizedRuns = tomRuns.map(function (r, idx) {
-            return {
-                i: idx,
-                text: r.text,
-                breakLine: !!(r.options && r.options.breakLine),
-                bold: !!(r.options && r.options.bold),
-                italic: !!(r.options && r.options.italic),
-                underline: !!(r.options && r.options.underline)
-            };
-        });
-
-        console.group('Anything Report PPTX Debug: Top of Mind');
-        console.log('innerHTML:', tomHtml);
-        console.log('innerText:', tomText);
-        console.log('runCount:', tomRuns.length);
-        console.table(summarizedRuns);
-        console.log('rawRuns:', tomRuns);
-        console.groupEnd();
-    }
-
     function downloadPptx() {
         var state = getState();
         var hasMidpoint = state.hasMidpoint;
@@ -387,10 +361,4 @@
 
     var btn = document.getElementById('pptxBtn');
     if (btn) btn.addEventListener('click', downloadPptx);
-
-    var debugBtn = document.getElementById('pptxDebugBtn');
-    if (debugBtn) debugBtn.addEventListener('click', logTopOfMindRuns);
-
-    // Temporary manual hook for debugging in DevTools.
-    window.__arDebugPptxTopOfMind = logTopOfMindRuns;
 })();

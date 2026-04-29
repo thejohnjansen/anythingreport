@@ -190,8 +190,32 @@
         /* ── Pipeline helpers ────────────────────────────────────── */
         var PL_STAGES  = ['Investigate','Explainer / Design Doc','Implementation','Dev Trial','Origin Trial / CFR','Ship'];
         var PL_HEADERS = ['INVESTIGATE','EXPLAINER/<br>DESIGN DOC','IMPLEMENTATION','DEV TRIAL','ORIGIN TRIAL/<br>CFR','SHIP'];
+        var DEFAULT_PIPELINE_TITLE = '</> Pipeline';
 
-        function plLoad() { try { return JSON.parse(localStorage.getItem('ar_pipeline')); } catch(e) { return null; } }
+        function escapeHtml(s) {
+            return String(s || '')
+                .replace(/&/g, '&amp;')
+                .replace(/</g, '&lt;')
+                .replace(/>/g, '&gt;')
+                .replace(/"/g, '&quot;');
+        }
+
+        function normalizePipelineTitle(title) {
+            var t = (title || '').trim();
+            if (!t || t === 'Pipeline') return DEFAULT_PIPELINE_TITLE;
+            return t;
+        }
+
+        function plLoad() {
+            try {
+                var pl = JSON.parse(localStorage.getItem('ar_pipeline'));
+                if (!pl || typeof pl !== 'object') return null;
+                pl.title = normalizePipelineTitle(pl.title);
+                return pl;
+            } catch(e) {
+                return null;
+            }
+        }
         function plSave(d) { localStorage.setItem('ar_pipeline', JSON.stringify(d)); }
 
         function normalizePipelineStageValue(value) {
@@ -250,10 +274,8 @@
 
         function plEditorRowHTML(rd) {
             rd = rd || { topic: '', stages: ['','','','','',''], hereCol: -1, warnCol: -1, readonlyTopic: false };
-            var readonlyTopic = !!rd.readonlyTopic;
-            var h = '<tr class="pe-row"><td><input type="text" class="pe-topic' + (readonlyTopic ? ' pe-topic-readonly' : '') + '" value="' +
-                (rd.topic || '').replace(/"/g, '&quot;') + '" placeholder="Topic name"' +
-                (readonlyTopic ? ' readonly data-readonly-topic="true"' : ' data-readonly-topic="false"') + '></td>';
+            var h = '<tr class="pe-row"><td><input type="text" class="pe-topic" value="' +
+                (rd.topic || '').replace(/"/g, '&quot;') + '" placeholder="Topic name" data-readonly-topic="false"></td>';
             for (var s = 0; s < 6; s++) h += plStageEditorCellHTML(rd.stages[s] || '');
             h += '<td><select class="pe-here"><option value="-1"' +
                 (rd.hereCol < 0 ? ' selected' : '') + '>&mdash;</option>';
@@ -268,7 +290,7 @@
         }
 
         function plEditorHTML(pl) {
-            var d = pl || { title: 'Pipeline', rows: [] };
+            var d = pl || { title: DEFAULT_PIPELINE_TITLE, rows: [] };
             var h = '<table class="pe-table"><thead><tr><th class="pe-th-topic">Topic</th>';
             for (var s = 0; s < PL_STAGES.length; s++) {
                 var stageLabel = PL_STAGES[s]
@@ -374,7 +396,7 @@
             var existingRows = plReadEditorRows(editorEl);
             var mergedRows = plMergeRowsByTopic(existingRows, fetchedRows);
             var pl = plLoad() || { title: 'Pipeline', queryUrl: '', rows: [] };
-            pl.title = titleEl.textContent || 'Pipeline';
+            pl.title = titleEl.textContent || DEFAULT_PIPELINE_TITLE;
             pl.queryUrl = queryUrl;
             pl.rows = mergedRows;
             plSave(pl);
@@ -383,7 +405,7 @@
 
         async function plApply(vizEl, editorEl, titleEl, queryEl) {
             var pl = {
-                title: titleEl.textContent || 'Pipeline',
+                title: titleEl.textContent || DEFAULT_PIPELINE_TITLE,
                 queryUrl: queryEl ? queryEl.value.trim() : '',
                 rows: plReadEditorRows(editorEl)
             };
@@ -471,7 +493,7 @@
                         alert('Error: ' + err.message);
                     }
                 } else {
-                    var pl = plLoad() || { title: 'Pipeline', queryUrl: '', rows: [] };
+                    var pl = plLoad() || { title: DEFAULT_PIPELINE_TITLE, queryUrl: '', rows: [] };
                     $ed.innerHTML = plEditorHTML(pl);
                     if ($query) {
                         $query.hidden = false;
@@ -485,14 +507,14 @@
             });
 
             $ttl.addEventListener('input', function() {
-                var pl = plLoad() || { title: 'Pipeline', queryUrl: '', rows: [] };
-                pl.title = $ttl.textContent;
+                var pl = plLoad() || { title: DEFAULT_PIPELINE_TITLE, queryUrl: '', rows: [] };
+                pl.title = $ttl.textContent || DEFAULT_PIPELINE_TITLE;
                 plSave(pl);
             });
 
             if ($query) {
                 $query.addEventListener('input', function () {
-                    var pl = plLoad() || { title: 'Pipeline', queryUrl: '', rows: [] };
+                    var pl = plLoad() || { title: DEFAULT_PIPELINE_TITLE, queryUrl: '', rows: [] };
                     pl.queryUrl = $query.value;
                     plSave(pl);
                 });
@@ -502,13 +524,14 @@
         }
 
         function createPipelineSlide() {
-            var pl = plLoad() || { title: 'Pipeline', queryUrl: '', rows: [] };
+            var pl = plLoad() || { title: DEFAULT_PIPELINE_TITLE, queryUrl: '', rows: [] };
+            var safeTitle = escapeHtml(pl.title || DEFAULT_PIPELINE_TITLE);
             var div = document.createElement('div');
-            div.className = 'slide';
+            div.className = 'slide slide-pipeline';
             div.innerHTML =
                 '<div class="pipeline-header">' +
                 '<div class="pipeline-title-row">' +
-                '<h2 class="pl-title" contenteditable="true">' + (pl.title || 'Pipeline') + '</h2>' +
+                '<h2 class="pl-title" contenteditable="true">' + safeTitle + '</h2>' +
                 '<input type="text" class="pl-query" hidden placeholder="Paste ADO query to pre-populate the Titles" value="' + ((pl.queryUrl || '').replace(/"/g, '&quot;')) + '">' +
                 '<button type="button" class="pl-query-run" hidden>Run</button>' +
                 '</div>' +
@@ -529,7 +552,7 @@
             var topSlide = document.createElement('div');
             topSlide.className = 'slide active';
             topSlide.innerHTML =
-                '<h2>Top of Mind</h2>' +
+                '<h2>&lt;/&gt; Top of Mind</h2>' +
                 '<div id="tom" class="editable doc-edit" contenteditable="true" ' +
                 'placeholder="Click here to type your top-of-mind items…">' +
                 savedTom + '</div>';

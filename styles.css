@@ -1082,7 +1082,7 @@ nav span {
 .pv-topic span {
     display: block;
     background: #ddd;
-    padding: 4px 0 4px 4px;
+    padding: 4px;
     border-radius: 6px;
     font-size: 12px;
     font-weight: 600;

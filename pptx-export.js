@@ -212,221 +212,181 @@
             });
         }
 
-        // Slide 2: Pipeline
+        // Slide 2 (+ optional Slide 3): Pipeline — paginated
         var plTitleEl = document.querySelector('.pl-title');
         var plTitle = (plTitleEl && plTitleEl.textContent) ? plTitleEl.textContent : 'Pipeline';
-        var s2 = pres.addSlide();
-        pptxSlideHeader(s2, plTitle);
-        if (plData && plData.rows && plData.rows.length > 0) {
-            var plHeaders = ['INVESTIGATE', 'EXPLAINER /\nDESIGN DOC', 'IMPLEMENTATION', 'DEV TRIAL', 'ORIGIN TRIAL /\nCFR', 'SHIP'];
+        var plHeaders = ['INVESTIGATE', 'EXPLAINER /\nDESIGN DOC', 'IMPLEMENTATION', 'DEV TRIAL', 'ORIGIN TRIAL /\nCFR', 'SHIP'];
 
-            var chartX = 0.55;
-            var chartY = 1.35;
-            var chartW = 12.2;
-            var chartH = 5.85;
-            var topicW = 2.05;
-            var stageW = chartW - topicW;
-            var stageColW = stageW / 6;
+        var plChartX  = 0.20;
+        var plChartY  = 1.35;
+        var plChartW  = 12.93;
+        var plChartH  = 5.85;
+        var plTopicW  = 3.40;
+        var plStageW  = plChartW - plTopicW; // shortened to give topic more room
+        var plStageColW = plStageW / 6;
 
-            // Legend at top-right in two stacked columns.
-            var legendX = chartX + chartW - 4.9;
-            var legendY = 0.25;
-            var legendColGap = 2.45;
-            var legendRowH = 0.22;
-            var legendSymbolW = 0.24;
-            var legendTextW = 2.25;
+        // Cap at 12 rows; split >7 as 6 + remainder
+        var allPlRows = (plData && plData.rows) ? plData.rows.slice(0, 12) : [];
+        var plPageGroups;
+        if (allPlRows.length > 7) {
+            plPageGroups = [allPlRows.slice(0, 6), allPlRows.slice(6)];
+        } else {
+            plPageGroups = [allPlRows];
+        }
+        var plTotalPages = plPageGroups.length;
 
-            function addLegendItem(col, row, symbol, text, opts) {
-                var lx = legendX + col * legendColGap;
-                var ly = legendY + row * legendRowH;
+        for (var plPg = 0; plPg < plTotalPages; plPg++) {
+            var pageRows = plPageGroups[plPg];
+            var spl = pres.addSlide();
+            var pageTitle = plTotalPages > 1 ? plTitle + ' (' + (plPg + 1) + '/' + plTotalPages + ')' : plTitle;
+            pptxSlideHeader(spl, pageTitle);
+
+            if (pageRows.length === 0) {
+                spl.addText('No pipeline data \u2014 use the \u270e Edit button in the web view to add rows.', {
+                    x: PPT_X, y: TABLE_TOP_Y, w: PPT_W, h: 0.6,
+                    fontSize: 13, color: '888888', fontFace: 'Segoe UI', italic: true
+                });
+                continue;
+            }
+
+            // Legend (top-right, two stacked columns)
+            var legX = plChartX + plChartW - 4.9;
+            var legY = 0.25;
+            var legColGap = 2.45;
+            var legRowH = 0.22;
+            var legSymW = 0.24;
+            var legTxtW = 2.25;
+
+            function addPlLegendItem(slide, col, lrow, symbol, text, opts) {
+                var lx = legX + col * legColGap;
+                var ly = legY + lrow * legRowH;
                 if (opts.symbolType === 'dotFilled' || opts.symbolType === 'dotOpen') {
-                    var d = opts.symbolDiameter || 0.14;
-                    s2.addShape(pres.ShapeType.ellipse, {
-                        x: lx + (legendSymbolW - d) / 2,
-                        y: ly + 0.03,
-                        w: d,
-                        h: d,
-                        line: {
-                            color: opts.symbolColor,
-                            pt: opts.symbolType === 'dotOpen' ? 1.8 : 1.2
-                        },
-                        fill: {
-                            color: opts.symbolType === 'dotFilled' ? opts.symbolColor : 'FFFFFF'
-                        }
+                    var d = opts.symbolDiameter || 0.18;
+                    slide.addShape(pres.ShapeType.ellipse, {
+                        x: lx + (legSymW - d) / 2, y: ly + 0.03, w: d, h: d,
+                        line: { color: opts.symbolColor, pt: opts.symbolType === 'dotOpen' ? 2 : 1.2 },
+                        fill: { color: opts.symbolType === 'dotFilled' ? opts.symbolColor : 'FFFFFF' }
                     });
                 } else {
-                    s2.addText(symbol, {
-                        x: lx,
-                        y: ly,
-                        w: legendSymbolW,
-                        h: 0.2,
-                        align: 'center',
-                        valign: 'mid',
-                        fontSize: opts.symbolSize,
-                        bold: !!opts.symbolBold,
-                        color: opts.symbolColor,
-                        fontFace: opts.symbolFont || 'Segoe UI'
+                    slide.addText(symbol, {
+                        x: lx, y: ly, w: legSymW, h: 0.2,
+                        align: 'center', valign: 'mid',
+                        fontSize: opts.symbolSize, bold: !!opts.symbolBold,
+                        color: opts.symbolColor, fontFace: opts.symbolFont || 'Segoe UI'
                     });
                 }
-                s2.addText(text, {
-                    x: lx + legendSymbolW + 0.04,
-                    y: ly,
-                    w: legendTextW,
-                    h: 0.2,
-                    fontSize: 9,
-                    color: '4B5563',
-                    fontFace: 'Segoe UI'
+                slide.addText(text, {
+                    x: lx + legSymW + 0.04, y: ly, w: legTxtW, h: 0.2,
+                    fontSize: 9, color: '4B5563', fontFace: 'Segoe UI'
                 });
             }
 
-            addLegendItem(0, 0, '\u25BC', 'Roughly where we are', { symbolSize: 11, symbolBold: true, symbolColor: '2A8E2A' });
-            addLegendItem(0, 1, '\u26A0\uFE0F', 'Risk Identified', { symbolSize: 12, symbolColor: 'D97706', symbolFont: 'Segoe UI Emoji' });
-            addLegendItem(1, 0, '', 'Completed', { symbolType: 'dotFilled', symbolColor: '2A8E2A', symbolDiameter: 0.16 });
-            addLegendItem(1, 1, '', 'Committed for the current cycle', { symbolType: 'dotOpen', symbolColor: '2A8E2A', symbolDiameter: 0.16 });
-            addLegendItem(1, 2, '', 'Planned for a future cycle', { symbolType: 'dotOpen', symbolColor: '9CA3AF', symbolDiameter: 0.16 });
+            addPlLegendItem(spl, 0, 0, '\u25BC', 'Roughly where we are',        { symbolSize: 11, symbolBold: true, symbolColor: '2A8E2A' });
+            addPlLegendItem(spl, 0, 1, '\u26A0\uFE0F', 'Risk Identified',         { symbolSize: 12, symbolColor: 'D97706', symbolFont: 'Segoe UI Emoji' });
+            addPlLegendItem(spl, 1, 0, '', 'Completed',                           { symbolType: 'dotFilled', symbolColor: '2A8E2A', symbolDiameter: 0.18 });
+            addPlLegendItem(spl, 1, 1, '', 'Committed for the current cycle',     { symbolType: 'dotOpen',   symbolColor: '2A8E2A', symbolDiameter: 0.18 });
+            addPlLegendItem(spl, 1, 2, '', 'Planned for a future cycle',          { symbolType: 'dotOpen',   symbolColor: '9CA3AF', symbolDiameter: 0.18 });
 
-            var headerY = chartY + 0.72;
+            // Column headers
+            var plHeaderY = plChartY + 0.72;
             for (var ph = 0; ph < 6; ph++) {
-                s2.addText(plHeaders[ph], {
-                    x: chartX + topicW + ph * stageColW,
-                    y: headerY,
-                    w: stageColW,
-                    h: 0.36,
-                    align: 'center',
-                    valign: 'mid',
-                    bold: true,
-                    fontSize: 9,
-                    color: '666666',
-                    fontFace: 'Segoe UI'
+                spl.addText(plHeaders[ph], {
+                    x: plChartX + plTopicW + ph * plStageColW,
+                    y: plHeaderY, w: plStageColW, h: 0.36,
+                    align: 'center', valign: 'mid', bold: true,
+                    fontSize: 9, color: '666666', fontFace: 'Segoe UI'
                 });
             }
 
-            var rows = plData.rows || [];
-            var rowStartY = headerY + 0.44;
-            var rowGap = 0.18;
-            var availForRows = chartH - (rowStartY - chartY) - (rows.length - 1) * rowGap;
-            // ~50px at 96dpi is about 0.52in; cap row height there to avoid oversized rows.
-            var rowH = Math.min(0.58, availForRows / Math.max(rows.length, 1));
-            var nodeD = Math.min(0.54, rowH * 0.92);
+            // Row geometry — larger nodes since we cap at 6 per page
+            var plRowStartY = plHeaderY + 0.44;
+            var plRowGap    = 0.15;
+            var plN         = pageRows.length;
+            var plAvail     = (plChartY + plChartH) - plRowStartY - (plN - 1) * plRowGap;
+            var plRowH      = Math.min(0.95, plAvail / Math.max(plN, 1));
+            var plNodeD     = Math.min(0.65, plRowH * 1.05);
 
-            for (var r = 0; r < rows.length; r++) {
-                var row = rows[r];
-                var rowY = rowStartY + r * (rowH + rowGap);
-                var centerY = rowY + rowH * 0.5;
+            for (var r = 0; r < pageRows.length; r++) {
+                var row = pageRows[r];
+                var rowY    = plRowStartY + r * (plRowH + plRowGap);
+                var centerY = rowY + plRowH * 0.5;
 
-                s2.addShape(pres.ShapeType.roundRect, {
-                    x: chartX,
-                    y: rowY + rowH * 0.10,
-                    w: topicW - 0.18,
-                    h: rowH * 0.80,
+                // Topic pill
+                spl.addShape(pres.ShapeType.roundRect, {
+                    x: plChartX, y: rowY + plRowH * 0.10,
+                    w: plTopicW - 0.18, h: plRowH * 1.05,
                     rectRadius: 0.05,
-                    line: { color: 'DDDDDD', pt: 1 },
-                    fill: { color: 'DDDDDD' }
+                    line: { color: 'DDDDDD', pt: 1 }, fill: { color: 'DDDDDD' }
                 });
-                s2.addText(row.topic || '', {
-                    x: chartX + 0.06,
-                    y: rowY + rowH * 0.18,
-                    w: topicW - 0.30,
-                    h: rowH * 0.64,
-                    align: 'center',
-                    valign: 'mid',
-                    bold: true,
-                    fontSize: 10,
-                    color: '333333',
-                    fontFace: 'Segoe UI'
+                spl.addText(row.topic || '', {
+                    x: plChartX + 0.06, y: rowY + plRowH * 0.14,
+                    w: plTopicW - 0.30, h: plRowH * 0.88,
+                    align: 'center', valign: 'mid', bold: true,
+                    fontSize: 10, color: '333333', fontFace: 'Segoe UI'
                 });
 
-                s2.addShape(pres.ShapeType.line, {
-                    x: chartX + topicW - 0.18,
+                // Connector line
+                spl.addShape(pres.ShapeType.line, {
+                    x: plChartX + plTopicW - 0.18,
                     y: centerY,
-                    w: (chartX + topicW + stageColW * 5.5 + nodeD * 0.5) - (chartX + topicW - 0.18),
+                    w: (plChartX + plTopicW + plStageColW * 5.5 + plNodeD * 0.5) - (plChartX + plTopicW - 0.18),
                     h: 0,
-                    line: { color: '999999', pt: 4.5 }
+                    line: { color: '999999', pt: 5 }
                 });
 
+                // Stage nodes
                 for (var sc = 0; sc < 6; sc++) {
-                    var cx = chartX + topicW + stageColW * (sc + 0.5);
-                    var v = normalizePipelineStageValue((row.stages && row.stages[sc]) || '');
+                    var cx = plChartX + plTopicW + plStageColW * (sc + 0.5);
+                    var v  = normalizePipelineStageValue((row.stages && row.stages[sc]) || '');
                     var isHere = row.hereCol === sc;
                     var isWarn = row.warnCol === sc;
                     var isDone = v === 'complete';
 
                     if (isHere) {
-                        s2.addText('\u25BC', {
-                            x: cx - 0.08,
-                            y: centerY - nodeD * 0.70 - 0.07,
-                            w: 0.16,
-                            h: 0.18,
-                            align: 'center',
-                            color: '2A8E2A',
-                            bold: true,
-                            fontSize: 15,
-                            fontFace: 'Segoe UI'
+                        spl.addText('\u25BC', {
+                            x: cx - 0.11, y: centerY - plNodeD * 0.70 - 0.09,
+                            w: 0.22, h: 0.22,
+                            align: 'center', color: '2A8E2A', bold: true,
+                            fontSize: 17, fontFace: 'Segoe UI'
                         });
                     }
 
                     if (isWarn) {
-                        s2.addText('\u26A0\uFE0F', {
-                            x: cx - nodeD * 0.5 - 0.24,
-                            y: centerY - 0.12,
-                            w: 0.22,
-                            h: 0.22,
-                            align: 'center',
-                            valign: 'mid',
-                            fontSize: 17,
-                            fontFace: 'Segoe UI Emoji'
+                        spl.addText('\u26A0\uFE0F', {
+                            x: cx - plNodeD * 0.5 - 0.28, y: centerY - 0.14,
+                            w: 0.26, h: 0.26,
+                            align: 'center', valign: 'mid',
+                            fontSize: 19, fontFace: 'Segoe UI Emoji'
                         });
                     }
 
                     if (isDone) {
-                        s2.addShape(pres.ShapeType.ellipse, {
-                            x: cx - nodeD * 0.5,
-                            y: centerY - nodeD * 0.5,
-                            w: nodeD,
-                            h: nodeD,
-                            line: { color: '2A8E2A', pt: 1.5 },
-                            fill: { color: '2A8E2A' }
+                        spl.addShape(pres.ShapeType.ellipse, {
+                            x: cx - plNodeD * 0.5, y: centerY - plNodeD * 0.5,
+                            w: plNodeD, h: plNodeD,
+                            line: { color: '2A8E2A', pt: 1.5 }, fill: { color: '2A8E2A' }
                         });
                         continue;
                     }
 
                     if (v) {
                         var committed = row.hereCol >= 0 && sc <= row.hereCol;
-                        s2.addShape(pres.ShapeType.ellipse, {
-                            x: cx - nodeD * 0.5,
-                            y: centerY - nodeD * 0.5,
-                            w: nodeD,
-                            h: nodeD,
-                            line: { color: committed ? '2A8E2A' : 'AAAAAA', pt: 2 },
+                        spl.addShape(pres.ShapeType.ellipse, {
+                            x: cx - plNodeD * 0.5, y: centerY - plNodeD * 0.5,
+                            w: plNodeD, h: plNodeD,
+                            line: { color: committed ? '2A8E2A' : 'AAAAAA', pt: 2.5 },
                             fill: { color: 'FFFFFF' }
                         });
-                        s2.addText(v, {
-                            x: cx - nodeD * 0.5 + 0.01,
-                            y: centerY - nodeD * 0.5 + 0.01,
-                            w: nodeD - 0.02,
-                            h: nodeD - 0.02,
-                            align: 'center',
-                            valign: 'mid',
-                            fit: 'shrink',
-                            fontSize: 9,
-                            bold: true,
-                            color: committed ? '333333' : '666666',
-                            fontFace: 'Segoe UI'
+                        spl.addText(v, {
+                            x: cx - plNodeD * 0.5 + 0.02, y: centerY - plNodeD * 0.5 + 0.02,
+                            w: plNodeD - 0.04, h: plNodeD - 0.04,
+                            align: 'center', valign: 'mid', fit: 'shrink',
+                            fontSize: 10, bold: true,
+                            color: committed ? '333333' : '666666', fontFace: 'Segoe UI'
                         });
                     }
                 }
             }
-        } else {
-            s2.addText('No pipeline data \u2014 use the \u270e Edit button in the web view to add rows.', {
-                x: PPT_X,
-                y: TABLE_TOP_Y,
-                w: PPT_W,
-                h: 0.6,
-                fontSize: 13,
-                color: '888888',
-                fontFace: 'Segoe UI',
-                italic: true
-            });
         }
 
         // Slides 3+: Feature group slides

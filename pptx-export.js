@@ -311,15 +311,15 @@
                 var rowY    = plRowStartY + r * (plRowH + plRowGap);
                 var centerY = rowY + plRowH * 0.5;
 
-                // Topic pill
+                // Topic pill (nudged up by ~6px for visual centering)
                 spl.addShape(pres.ShapeType.roundRect, {
-                    x: plChartX, y: rowY + plRowH * 0.10,
+                    x: plChartX, y: rowY + plRowH * 0.10 - 0.0825,
                     w: plTopicW - 0.18, h: plRowH * 1.05,
                     rectRadius: 0.05,
                     line: { color: 'DDDDDD', pt: 1 }, fill: { color: 'DDDDDD' }
                 });
                 spl.addText(row.topic || '', {
-                    x: plChartX + 0.06, y: rowY + plRowH * 0.14,
+                    x: plChartX + 0.06, y: rowY + plRowH * 0.14 - 0.0525,
                     w: plTopicW - 0.30, h: plRowH * 0.88,
                     align: 'center', valign: 'mid', bold: true,
                     fontSize: 10, color: '333333', fontFace: 'Segoe UI'

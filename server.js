@@ -142,47 +142,124 @@ async function batchHistoricalFields(baseUrl, project, ids, asOfDate, token) {
 /* ── Build slide hierarchy ────────────────────────────────────── */
 
 function buildSlides(queryResult, workItemMap, midpointMap) {
-    const roots = [];
     const children = {};
+    const targetIds = new Set();
+    const rootIds = new Set();
+
+    function typeContains(wi, needle) {
+        const wiType = String(wi?.fields?.['System.WorkItemType'] || '').toLowerCase();
+        return wiType.includes(needle);
+    }
 
     for (const rel of queryResult.workItemRelations || []) {
-        if (!rel.source) {
-            roots.push(rel.target.id);
-        } else {
+        if (rel.target) targetIds.add(rel.target.id);
+        if (!rel.source && rel.target) rootIds.add(rel.target.id);
+        if (rel.source) {
             (children[rel.source.id] ||= []).push(rel.target.id);
         }
     }
 
     const slides = [];
-    for (const rootId of roots) {
-        for (const l2Id of children[rootId] || []) {
-            const wi = workItemMap[l2Id];
-            const rows = (children[l2Id] || [])
-                .map(id => workItemMap[id])
-                .filter(Boolean);
+    const additionalItems = [];
+    const seenAdditional = new Set();
+    const seenSlideIds = new Set();
 
-            slides.push({
-                title: wi?.fields?.['System.Title'] || `Work Item ${l2Id}`,
-                id: l2Id,
-                items: rows.map(w => {
-                    const item = {
-                        id:          w.id,
-                        title:       w.fields['System.Title'] || '',
-                        risk:        w.fields['OSG.RiskAssessment'] || '',
-                        riskComment: w.fields['OSG.RiskAssessmentComment'] || '',
-                        state:       w.fields['System.State'] || '',
-                        assignedTo:  w.fields['System.AssignedTo']?.displayName || ''
-                    };
-                    if (midpointMap) {
-                        const snap = midpointMap[w.id] || {};
-                        item.midpointRisk    = snap.risk || '';
-                        item.midpointComment = snap.riskComment || '';
-                    }
-                    return item;
-                })
-            });
+    // Objective nodes may not always be tree roots; find by type first,
+    // then fall back to roots so we do not miss valid trees with custom types.
+    const objectiveIds = [];
+    for (const id of targetIds) {
+        const wi = workItemMap[id];
+        if (typeContains(wi, 'objective')) objectiveIds.push(id);
+    }
+    if (objectiveIds.length === 0) {
+        for (const rootId of rootIds) objectiveIds.push(rootId);
+    }
+
+    const candidateEpicIds = new Set();
+    for (const objectiveId of objectiveIds) {
+        const directChildren = children[objectiveId] || [];
+
+        for (const childId of directChildren) {
+            const wi = workItemMap[childId];
+            if (!wi || !typeContains(wi, 'epic')) {
+                continue;
+            }
+            candidateEpicIds.add(childId);
         }
     }
+
+    // Also include root-level epics (source-less nodes) so top-level epics in the query are not missed.
+    for (const rootId of rootIds) {
+        const wi = workItemMap[rootId];
+        if (!wi || !typeContains(wi, 'epic')) continue;
+        candidateEpicIds.add(rootId);
+    }
+
+    for (const epicId of candidateEpicIds) {
+        const wi = workItemMap[epicId];
+        const rows = (children[epicId] || [])
+            .map(id => workItemMap[id])
+            .filter(Boolean);
+
+        if (rows.length === 0) {
+            if (seenAdditional.has(epicId)) {
+                continue;
+            }
+
+            const item = {
+                id: epicId,
+                title: wi?.fields?.['System.Title'] || '',
+                risk: wi?.fields?.['OSG.RiskAssessment'] || '',
+                riskComment: wi?.fields?.['OSG.RiskAssessmentComment'] || '',
+                state: wi?.fields?.['System.State'] || '',
+                assignedTo: wi?.fields?.['System.AssignedTo']?.displayName || ''
+            };
+            if (midpointMap) {
+                const snap = midpointMap[epicId] || {};
+                item.midpointRisk = snap.risk || '';
+                item.midpointComment = snap.riskComment || '';
+            }
+
+            additionalItems.push(item);
+            seenAdditional.add(epicId);
+            continue;
+        }
+
+        if (seenSlideIds.has(epicId)) {
+            continue;
+        }
+
+        slides.push({
+            title: wi?.fields?.['System.Title'] || `Work Item ${epicId}`,
+            id: epicId,
+            items: rows.map(w => {
+                const item = {
+                    id:          w.id,
+                    title:       w.fields['System.Title'] || '',
+                    risk:        w.fields['OSG.RiskAssessment'] || '',
+                    riskComment: w.fields['OSG.RiskAssessmentComment'] || '',
+                    state:       w.fields['System.State'] || '',
+                    assignedTo:  w.fields['System.AssignedTo']?.displayName || ''
+                };
+                if (midpointMap) {
+                    const snap = midpointMap[w.id] || {};
+                    item.midpointRisk    = snap.risk || '';
+                    item.midpointComment = snap.riskComment || '';
+                }
+                return item;
+            })
+        });
+        seenSlideIds.add(epicId);
+    }
+
+    if (additionalItems.length) {
+        slides.push({
+            title: 'Additional Work',
+            id: 'additional-work',
+            items: additionalItems
+        });
+    }
+
     return slides;
 }
 

@@ -201,6 +201,15 @@
             return v;
         }
 
+        function plStageEditorCellHTML(value) {
+            var normalized = normalizePipelineStageValue(value);
+            var checked = (normalized === 'complete');
+            var label = checked ? '' : normalized;
+            return '<td><label class="pe-stage-wrap">' +
+                '<input type="checkbox" class="pe-stage-complete" title="Complete?"' + (checked ? ' checked' : '') + '>' +
+                '<input type="text" class="pe-stage-input" value="' + label.replace(/"/g, '&quot;') + '" placeholder="Cycle"' + (checked ? ' disabled' : '') + '></label></td>';
+        }
+
         function plVizHTML(pl) {
             if (!pl || !pl.rows || !pl.rows.length)
                 return '<p class="pv-empty">Click <b>&#9998; Edit</b> to add pipeline rows.</p>';
@@ -243,9 +252,7 @@
             rd = rd || { topic: '', stages: ['','','','','',''], hereCol: -1, warnCol: -1 };
             var h = '<tr class="pe-row"><td><input type="text" class="pe-topic" value="' +
                 (rd.topic || '').replace(/"/g, '&quot;') + '" placeholder="Topic name"></td>';
-            for (var s = 0; s < 6; s++)
-                h += '<td><input type="text" class="pe-stage" value="' +
-                    (rd.stages[s] || '').replace(/"/g, '&quot;') + '" placeholder="complete / label"></td>';
+            for (var s = 0; s < 6; s++) h += plStageEditorCellHTML(rd.stages[s] || '');
             h += '<td><select class="pe-here"><option value="-1"' +
                 (rd.hereCol < 0 ? ' selected' : '') + '>&mdash;</option>';
             for (var s = 0; s < PL_STAGES.length; s++)
@@ -270,21 +277,106 @@
             return h;
         }
 
-        function plApply(vizEl, editorEl, titleEl) {
-            var pl = { title: titleEl.textContent || 'Pipeline', rows: [] };
+        function plSyncStageInputs(container) {
+            container.querySelectorAll('.pe-stage-wrap').forEach(function (wrap) {
+                var checkbox = wrap.querySelector('.pe-stage-complete');
+                var input = wrap.querySelector('.pe-stage-input');
+                if (!checkbox || !input) return;
+                input.disabled = checkbox.checked;
+            });
+        }
+
+        async function plFetchRows(queryUrl) {
+            var res = await fetch('/api/pipeline', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ queryUrl: queryUrl })
+            });
+            var data = await res.json();
+            if (!res.ok || data.error) throw new Error(data.error || 'Failed to load pipeline titles');
+            return {
+                rows: data.rows || [],
+                diagnostics: data.diagnostics || null
+            };
+        }
+
+        function plTopicKey(topic) {
+            return (topic || '').trim().toLowerCase();
+        }
+
+        function plReadEditorRows(editorEl) {
+            var rows = [];
             editorEl.querySelectorAll('.pe-row').forEach(function(tr) {
                 var topic = tr.querySelector('.pe-topic').value;
                 var stages = [];
-                tr.querySelectorAll('.pe-stage').forEach(function(inp) {
-                    stages.push(normalizePipelineStageValue(inp.value));
+                tr.querySelectorAll('.pe-stage-wrap').forEach(function(wrap) {
+                    var checkbox = wrap.querySelector('.pe-stage-complete');
+                    var input = wrap.querySelector('.pe-stage-input');
+                    stages.push(checkbox && checkbox.checked ? 'complete' : normalizePipelineStageValue(input ? input.value : ''));
                 });
-                pl.rows.push({
+                rows.push({
                     topic: topic,
                     stages: stages,
                     hereCol: parseInt(tr.querySelector('.pe-here').value, 10),
                     warnCol: parseInt(tr.querySelector('.pe-warn').value, 10)
                 });
             });
+            return rows;
+        }
+
+        function plMergeRowsByTopic(existingRows, fetchedRows) {
+            var existingByTopic = new Map();
+            existingRows.forEach(function (row) {
+                existingByTopic.set(plTopicKey(row.topic), row);
+            });
+
+            return fetchedRows.map(function (row) {
+                var existing = existingByTopic.get(plTopicKey(row.topic));
+                if (!existing) return row;
+                return {
+                    topic: row.topic,
+                    stages: existing.stages || ['', '', '', '', '', ''],
+                    hereCol: existing.hereCol ?? -1,
+                    warnCol: existing.warnCol ?? -1
+                };
+            });
+        }
+
+        async function plPopulateFromQuery(editorEl, titleEl, queryEl) {
+            var queryUrl = queryEl ? queryEl.value.trim() : '';
+            if (!queryUrl) throw new Error('Pipeline query URL is required');
+
+            var fetchResult = await plFetchRows(queryUrl);
+            var fetchedRows = fetchResult.rows;
+            if (!fetchedRows.length) {
+                var d = fetchResult.diagnostics;
+                if (d) {
+                    throw new Error(
+                        'No work item titles were returned from this query. Existing rows were left unchanged. ' +
+                        '(WIQL workItems=' + d.wiqlWorkItemsCount +
+                        ', WIQL relations=' + d.wiqlRelationsCount +
+                        ', unique IDs=' + d.uniqueIdCount +
+                        ', fetched items=' + d.fetchedWorkItemCount + '.)'
+                    );
+                }
+                throw new Error('No work item titles were returned from this query. Existing rows were left unchanged.');
+            }
+            var existingRows = plReadEditorRows(editorEl);
+            var mergedRows = plMergeRowsByTopic(existingRows, fetchedRows);
+            var pl = plLoad() || { title: 'Pipeline', queryUrl: '', rows: [] };
+            pl.title = titleEl.textContent || 'Pipeline';
+            pl.queryUrl = queryUrl;
+            pl.rows = mergedRows;
+            plSave(pl);
+            return pl;
+        }
+
+        async function plApply(vizEl, editorEl, titleEl, queryEl) {
+            var pl = {
+                title: titleEl.textContent || 'Pipeline',
+                queryUrl: queryEl ? queryEl.value.trim() : '',
+                rows: plReadEditorRows(editorEl)
+            };
             plSave(pl);
             vizEl.innerHTML = plVizHTML(pl);
         }
@@ -294,32 +386,88 @@
             var $ed  = slideEl.querySelector('.pl-editor');
             var $btn = slideEl.querySelector('.pl-edit-btn');
             var $ttl = slideEl.querySelector('.pl-title');
+            var $query = slideEl.querySelector('.pl-query');
+            var $queryRun = slideEl.querySelector('.pl-query-run');
+
+            function wireStageControls(container) {
+                container.querySelectorAll('.pe-stage-complete').forEach(function (checkbox) {
+                    if (checkbox.dataset.wired === 'true') return;
+                    checkbox.dataset.wired = 'true';
+                    checkbox.addEventListener('change', function () {
+                        var wrap = checkbox.closest('.pe-stage-wrap');
+                        if (!wrap) return;
+                        var input = wrap.querySelector('.pe-stage-input');
+                        if (!input) return;
+                        input.disabled = checkbox.checked;
+                    });
+                });
+                plSyncStageInputs(container);
+            }
 
             function wireEditorButtons(container) {
+                function rerenderEditor(pl) {
+                    container.innerHTML = plEditorHTML(pl);
+                    wireEditorButtons(container);
+                }
+
                 container.querySelector('#peAdd').addEventListener('click', function() {
                     var tbody = container.querySelector('#peRows');
                     tbody.insertAdjacentHTML('beforeend', plEditorRowHTML(null));
                     var last = tbody.lastElementChild;
                     last.querySelector('.pe-remove').addEventListener('click', function() { last.remove(); });
+                    wireStageControls(last);
                 });
-                container.querySelector('#peApply').addEventListener('click', function() {
-                    plApply($viz, $ed, $ttl);
-                    $ed.hidden = true; $viz.hidden = false;
-                    $btn.innerHTML = '&#9998; Edit';
+                var runBtn = slideEl.querySelector('.pl-query-run');
+                if (runBtn && runBtn.dataset.wired !== 'true') {
+                    runBtn.dataset.wired = 'true';
+                    runBtn.addEventListener('click', async function () {
+                        try {
+                            runBtn.disabled = true;
+                            var pl = await plPopulateFromQuery(container, $ttl, $query);
+                            rerenderEditor(pl);
+                        } catch (err) {
+                            alert('Error: ' + err.message);
+                        } finally {
+                            runBtn.disabled = false;
+                        }
+                    });
+                }
+                container.querySelector('#peApply').addEventListener('click', async function() {
+                    try {
+                        await plApply($viz, $ed, $ttl, $query);
+                        $ed.hidden = true; $viz.hidden = false;
+                        if ($query) $query.hidden = true;
+                        if ($queryRun) $queryRun.hidden = true;
+                        $btn.innerHTML = '&#9998; Edit';
+                    } catch (err) {
+                        alert('Error: ' + err.message);
+                    }
                 });
                 container.querySelectorAll('.pe-remove').forEach(function(b) {
                     b.addEventListener('click', function() { b.closest('.pe-row').remove(); });
                 });
+                wireStageControls(container);
             }
 
-            $btn.addEventListener('click', function() {
+            $btn.addEventListener('click', async function() {
                 if (!$ed.hidden) {
-                    plApply($viz, $ed, $ttl);
-                    $ed.hidden = true; $viz.hidden = false;
-                    $btn.innerHTML = '&#9998; Edit';
+                    try {
+                        await plApply($viz, $ed, $ttl, $query);
+                        $ed.hidden = true; $viz.hidden = false;
+                        if ($query) $query.hidden = true;
+                        if ($queryRun) $queryRun.hidden = true;
+                        $btn.innerHTML = '&#9998; Edit';
+                    } catch (err) {
+                        alert('Error: ' + err.message);
+                    }
                 } else {
-                    var pl = plLoad() || { title: 'Pipeline', rows: [] };
+                    var pl = plLoad() || { title: 'Pipeline', queryUrl: '', rows: [] };
                     $ed.innerHTML = plEditorHTML(pl);
+                    if ($query) {
+                        $query.hidden = false;
+                        $query.value = pl.queryUrl || '';
+                    }
+                    if ($queryRun) $queryRun.hidden = false;
                     wireEditorButtons($ed);
                     $ed.hidden = false; $viz.hidden = true;
                     $btn.innerHTML = '&#10003; Done';
@@ -327,21 +475,33 @@
             });
 
             $ttl.addEventListener('input', function() {
-                var pl = plLoad() || { title: 'Pipeline', rows: [] };
+                var pl = plLoad() || { title: 'Pipeline', queryUrl: '', rows: [] };
                 pl.title = $ttl.textContent;
                 plSave(pl);
             });
+
+            if ($query) {
+                $query.addEventListener('input', function () {
+                    var pl = plLoad() || { title: 'Pipeline', queryUrl: '', rows: [] };
+                    pl.queryUrl = $query.value;
+                    plSave(pl);
+                });
+            }
 
             wireEditorButtons($ed);
         }
 
         function createPipelineSlide() {
-            var pl = plLoad() || { title: 'Pipeline', rows: [] };
+            var pl = plLoad() || { title: 'Pipeline', queryUrl: '', rows: [] };
             var div = document.createElement('div');
             div.className = 'slide';
             div.innerHTML =
                 '<div class="pipeline-header">' +
+                '<div class="pipeline-title-row">' +
                 '<h2 class="pl-title" contenteditable="true">' + (pl.title || 'Pipeline') + '</h2>' +
+                '<input type="text" class="pl-query" hidden placeholder="Paste ADO query to pre-populate the Titles" value="' + ((pl.queryUrl || '').replace(/"/g, '&quot;')) + '">' +
+                '<button type="button" class="pl-query-run" hidden>Run</button>' +
+                '</div>' +
                 '<button type="button" class="pl-edit-btn">&#9998; Edit</button></div>' +
                 '<div class="pl-viz">' + plVizHTML(pl) + '</div>' +
                 '<div class="pl-editor" hidden>' + plEditorHTML(pl) + '</div>';

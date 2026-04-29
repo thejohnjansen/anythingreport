@@ -354,6 +354,35 @@ function buildRetroRows(queryResult, workItemMap) {
     return rows;
 }
 
+function buildPipelineRows(queryResult, workItemMap) {
+    const orderedIds = [];
+    const seenIds = new Set();
+
+    for (const wiRef of queryResult.workItems || []) {
+        const id = wiRef.id;
+        if (!id || seenIds.has(id)) continue;
+        seenIds.add(id);
+        orderedIds.push(id);
+    }
+
+    for (const rel of queryResult.workItemRelations || []) {
+        const id = rel.target?.id;
+        if (!id || seenIds.has(id)) continue;
+        seenIds.add(id);
+        orderedIds.push(id);
+    }
+
+    return orderedIds
+        .map(id => workItemMap[id])
+        .filter(Boolean)
+        .map(wi => ({
+            topic: wi.fields['System.Title'] || '',
+            stages: ['', '', '', '', '', ''],
+            hereCol: -1,
+            warnCol: -1
+        }));
+}
+
 /* ── Retro API route ──────────────────────────────────────────── */
 
 app.post('/api/retro', async (req, res) => {
@@ -376,6 +405,45 @@ app.post('/api/retro', async (req, res) => {
         const linkBase = `${baseUrl}/${project}/_workitems/edit/`;
 
         res.json({ rows, linkBase });
+    } catch (err) {
+        console.error('❌', err);
+        res.status(500).json({ error: err.message });
+    }
+});
+
+app.post('/api/pipeline', async (req, res) => {
+    try {
+        const { queryUrl } = req.body;
+        if (!queryUrl) return res.status(400).json({ error: 'queryUrl is required' });
+
+        const { baseUrl, project, queryId } = parseQueryUrl(queryUrl);
+        const token = getToken();
+
+        const queryResult = await runQuery(baseUrl, project, queryId, token);
+
+        const wiqlWorkItemsCount = (queryResult.workItems || []).length;
+        const wiqlRelationsCount = (queryResult.workItemRelations || []).length;
+
+        const allIds = new Set();
+        for (const wiRef of queryResult.workItems || []) {
+            if (wiRef.id) allIds.add(wiRef.id);
+        }
+        for (const rel of queryResult.workItemRelations || []) {
+            if (rel.target) allIds.add(rel.target.id);
+        }
+
+        const workItemMap = await fetchWorkItems(baseUrl, project, [...allIds], token);
+        const rows = buildPipelineRows(queryResult, workItemMap);
+
+        const diagnostics = {
+            wiqlWorkItemsCount,
+            wiqlRelationsCount,
+            uniqueIdCount: allIds.size,
+            fetchedWorkItemCount: Object.keys(workItemMap).length,
+            rowCount: rows.length
+        };
+
+        res.json({ rows, diagnostics });
     } catch (err) {
         console.error('❌', err);
         res.status(500).json({ error: err.message });

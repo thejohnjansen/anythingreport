@@ -945,11 +945,50 @@ nav span {
     align-items: center;
     justify-content: space-between;
     margin-bottom: 12px;
+    gap: 12px;
+}
+.pipeline-title-row {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    min-width: 0;
+    flex: 1;
 }
 .pl-title {
     margin: 0;
     outline: none;
     font-size: 22px;
+    flex-shrink: 0;
+}
+.pl-query {
+    width: min(380px, 100%);
+    min-width: 220px;
+    padding: 6px 10px;
+    border: 1px solid #d0d7de;
+    border-radius: 6px;
+    font-size: 12px;
+    color: #334155;
+    background: #fff;
+    outline: none;
+}
+.pl-query:focus {
+    border-color: var(--accent);
+}
+.pl-query-run {
+    padding: 6px 12px;
+    background: #eef6ff;
+    border: 1px solid #b6d4fe;
+    border-radius: 6px;
+    cursor: pointer;
+    font-size: 12px;
+    font-weight: 600;
+    color: #0f5ea8;
+    white-space: nowrap;
+}
+.pl-query-run:hover { background: #dbeafe; }
+.pl-query-run:disabled {
+    opacity: 0.6;
+    cursor: wait;
 }
 .pl-edit-btn {
     padding: 6px 16px;
@@ -1152,12 +1191,20 @@ nav span {
     text-align: center;
     white-space: nowrap;
 }
-.pe-th-topic { text-align: left !important; }
+.pe-th-topic {
+    text-align: left !important;
+    width: 220px;
+    min-width: 220px;
+}
 .pe-table td {
     padding: 3px 2px;
     border-bottom: 1px solid #eee;
 }
-.pe-topic, .pe-stage {
+.pe-table td:first-child {
+    width: 220px;
+    min-width: 220px;
+}
+.pe-topic {
     width: 100%;
     padding: 5px 5px;
     border: 1px solid #ddd;
@@ -1165,9 +1212,34 @@ nav span {
     font-size: 12px;
     outline: none;
 }
-.pe-topic:focus, .pe-stage:focus { border-color: var(--accent); }
-.pe-topic { min-width: 100px; }
-.pe-stage { min-width: 50px; }
+.pe-topic:focus, .pe-stage-input:focus { border-color: var(--accent); }
+.pe-topic { min-width: 200px; }
+.pe-stage-wrap {
+    display: flex;
+    align-items: center;
+    gap: 4px;
+    width: 100%;
+}
+.pe-stage-complete {
+    margin: 0;
+    width: 12px;
+    height: 12px;
+    flex-shrink: 0;
+}
+.pe-stage-input {
+    width: 72%;
+    max-width: 54px;
+    min-width: 0;
+    padding: 3px 3px;
+    border: 1px solid #ddd;
+    border-radius: 4px;
+    font-size: 10px;
+    outline: none;
+}
+.pe-stage-input:disabled {
+    background: #f7f8fa;
+    color: #9aa1aa;
+}
 .pe-here,
 .pe-warn {
     padding: 4px 2px;

@@ -1080,7 +1080,9 @@ nav span {
     padding: 0 0 0 6px;
 }
 .pv-topic span {
-    display: block;
+    display: flex;
+    align-items: center;
+    justify-content: center;
     background: #ddd;
     padding: 4px;
     border-radius: 6px;
@@ -1089,6 +1091,7 @@ nav span {
     color: #333;
     text-align: center;
     width: 100%;
+    min-height: 60px;
     line-height: 1.3;
 }
 

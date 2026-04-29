@@ -218,9 +218,8 @@
         var plHeaders = ['INVESTIGATE', 'EXPLAINER /\nDESIGN DOC', 'IMPLEMENTATION', 'DEV TRIAL', 'ORIGIN TRIAL /\nCFR', 'SHIP'];
 
         var plChartX  = 0.20;
-        var plChartY  = 1.35;
         var plChartW  = 12.93;
-        var plChartH  = 5.85;
+        var plChartBottomY = 7.05;
         var plTopicW  = 3.40;
         var plStageW  = plChartW - plTopicW; // shortened to give topic more room
         var plStageColW = plStageW / 6;
@@ -287,8 +286,9 @@
             addPlLegendItem(spl, 1, 1, '', 'Committed for the current cycle',     { symbolType: 'dotOpen',   symbolColor: '2A8E2A', symbolDiameter: 0.18 });
             addPlLegendItem(spl, 1, 2, '', 'Planned for a future cycle',          { symbolType: 'dotOpen',   symbolColor: '9CA3AF', symbolDiameter: 0.18 });
 
-            // Column headers
-            var plHeaderY = plChartY + 0.72;
+            // Anchor the pipeline directly below the legend instead of centering it vertically.
+            var plLegendBottomY = legY + legRowH * 3 + 0.02;
+            var plHeaderY = plLegendBottomY + 0.14;
             for (var ph = 0; ph < 6; ph++) {
                 spl.addText(plHeaders[ph], {
                     x: plChartX + plTopicW + ph * plStageColW,
@@ -299,28 +299,34 @@
             }
 
             // Row geometry — larger nodes since we cap at 6 per page
-            var plRowStartY = plHeaderY + 0.44;
+            var plRowStartY = plHeaderY + 0.58;
             var plRowGap    = 0.15;
-            var plN         = pageRows.length;
-            var plAvail     = (plChartY + plChartH) - plRowStartY - (plN - 1) * plRowGap;
-            var plRowH      = Math.min(0.95, plAvail / Math.max(plN, 1));
+            var plFixedRows = 6;
+            var plAvail     = plChartBottomY - plRowStartY - (plFixedRows - 1) * plRowGap;
+            var plRowH      = Math.min(0.95, plAvail / plFixedRows);
             var plNodeD     = Math.min(0.65, plRowH * 1.05);
+            var plReferenceRows = 5;
+            var plReferenceAvail = plChartBottomY - plRowStartY - (plReferenceRows - 1) * plRowGap;
+            var plReferenceRowH = Math.min(0.95, plReferenceAvail / plReferenceRows);
+            var plTopicHeightTrim = 20 / 96;
+            var plTopicBoxH = Math.max(0.3, plReferenceRowH * 1.05 - plTopicHeightTrim);
+            var plTopicTextH = Math.max(0.24, plReferenceRowH * 0.88 - plTopicHeightTrim);
 
             for (var r = 0; r < pageRows.length; r++) {
                 var row = pageRows[r];
                 var rowY    = plRowStartY + r * (plRowH + plRowGap);
                 var centerY = rowY + plRowH * 0.5;
 
-                // Topic pill (nudged up by ~6px for visual centering)
+                // Keep topic pills at the five-row reference size so they stay readable.
                 spl.addShape(pres.ShapeType.roundRect, {
-                    x: plChartX, y: rowY + plRowH * 0.10 - 0.0825,
-                    w: plTopicW - 0.18, h: plRowH * 1.05,
+                    x: plChartX, y: centerY - plTopicBoxH * 0.5,
+                    w: plTopicW - 0.18, h: plTopicBoxH,
                     rectRadius: 0.05,
                     line: { color: 'DDDDDD', pt: 1 }, fill: { color: 'DDDDDD' }
                 });
                 spl.addText(row.topic || '', {
-                    x: plChartX + 0.06, y: rowY + plRowH * 0.14 - 0.0525,
-                    w: plTopicW - 0.30, h: plRowH * 0.88,
+                    x: plChartX + 0.06, y: centerY - plTopicTextH * 0.5,
+                    w: plTopicW - 0.30, h: plTopicTextH,
                     align: 'center', valign: 'mid', bold: true,
                     fontSize: 10, color: '333333', fontFace: 'Segoe UI'
                 });

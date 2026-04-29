@@ -1052,7 +1052,7 @@ nav span {
 
 .pv-header-row {
     display: grid;
-    grid-template-columns: 170px repeat(6, 1fr);
+    grid-template-columns: 250px repeat(6, 1fr);
     margin-bottom: 2px;
 }
 
@@ -1068,7 +1068,7 @@ nav span {
 
 .pv-row {
     display: grid;
-    grid-template-columns: 170px 1fr;
+    grid-template-columns: 250px 1fr;
     align-items: center;
     margin-bottom: 2px;
 }
@@ -1077,12 +1077,12 @@ nav span {
     display: flex;
     align-items: center;
     justify-content: center;
-    padding: 0 6px;
+    padding: 0 0 0 6px;
 }
 .pv-topic span {
     display: block;
     background: #ddd;
-    padding: 7px 10px;
+    padding: 4px 0 4px 4px;
     border-radius: 6px;
     font-size: 12px;
     font-weight: 600;
@@ -1101,7 +1101,7 @@ nav span {
 .pv-line {
     position: absolute;
     top: 50%;
-    left: 4%;
+    left: 0;
     right: 4%;
     height: 5px;
     background: #999;
@@ -1113,7 +1113,6 @@ nav span {
     position: relative;
     z-index: 1;
     display: flex;
-    flex-direction: column;
     align-items: center;
     justify-content: center;
     min-height: 48px;
@@ -1121,11 +1120,15 @@ nav span {
 
 /* "Where we are" arrow */
 .pv-arrow {
+    position: absolute;
+    left: 50%;
+    top: -5px;
+    transform: translateX(-50%);
+    z-index: 3;
     color: #2a8e2a;
     font-size: 14px;
     font-weight: 700;
     line-height: 1;
-    margin-bottom: -2px;
 }
 
 /* Warning marker appears on the connector, just left of the selected node. */
@@ -1145,6 +1148,8 @@ nav span {
 
 /* Circles */
 .pv-node {
+    position: relative;
+    z-index: 1;
     width: 34px;
     height: 34px;
     border-radius: 50%;
@@ -1214,6 +1219,13 @@ nav span {
 }
 .pe-topic:focus, .pe-stage-input:focus { border-color: var(--accent); }
 .pe-topic { min-width: 200px; }
+.pe-topic-readonly {
+    min-height: 52px;
+    height: 52px;
+    background: #f7f8fa;
+    color: #4b5563;
+    cursor: default;
+}
 .pe-stage-wrap {
     display: flex;
     align-items: center;

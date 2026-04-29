@@ -189,7 +189,7 @@
 
         /* ── Pipeline helpers ────────────────────────────────────── */
         var PL_STAGES  = ['Investigate','Explainer / Design Doc','Implementation','Dev Trial','Origin Trial / CFR','Ship'];
-        var PL_HEADERS = ['INVESTIGATE','EXPLAINER /<br>DESIGN DOC','IMPLEMENTATION','DEV TRIAL','ORIGIN TRIAL /<br>CFR','SHIP'];
+        var PL_HEADERS = ['INVESTIGATE','EXPLAINER/<br>DESIGN DOC','IMPLEMENTATION','DEV TRIAL','ORIGIN TRIAL/<br>CFR','SHIP'];
 
         function plLoad() { try { return JSON.parse(localStorage.getItem('ar_pipeline')); } catch(e) { return null; } }
         function plSave(d) { localStorage.setItem('ar_pipeline', JSON.stringify(d)); }
@@ -249,9 +249,11 @@
         }
 
         function plEditorRowHTML(rd) {
-            rd = rd || { topic: '', stages: ['','','','','',''], hereCol: -1, warnCol: -1 };
-            var h = '<tr class="pe-row"><td><input type="text" class="pe-topic" value="' +
-                (rd.topic || '').replace(/"/g, '&quot;') + '" placeholder="Topic name"></td>';
+            rd = rd || { topic: '', stages: ['','','','','',''], hereCol: -1, warnCol: -1, readonlyTopic: false };
+            var readonlyTopic = !!rd.readonlyTopic;
+            var h = '<tr class="pe-row"><td><input type="text" class="pe-topic' + (readonlyTopic ? ' pe-topic-readonly' : '') + '" value="' +
+                (rd.topic || '').replace(/"/g, '&quot;') + '" placeholder="Topic name"' +
+                (readonlyTopic ? ' readonly data-readonly-topic="true"' : ' data-readonly-topic="false"') + '></td>';
             for (var s = 0; s < 6; s++) h += plStageEditorCellHTML(rd.stages[s] || '');
             h += '<td><select class="pe-here"><option value="-1"' +
                 (rd.hereCol < 0 ? ' selected' : '') + '>&mdash;</option>';
@@ -268,7 +270,12 @@
         function plEditorHTML(pl) {
             var d = pl || { title: 'Pipeline', rows: [] };
             var h = '<table class="pe-table"><thead><tr><th class="pe-th-topic">Topic</th>';
-            for (var s = 0; s < PL_STAGES.length; s++) h += '<th>' + PL_STAGES[s] + '</th>';
+            for (var s = 0; s < PL_STAGES.length; s++) {
+                var stageLabel = PL_STAGES[s]
+                    .replace('Explainer / Design Doc', 'Explainer /<br>Design Doc')
+                    .replace('Origin Trial / CFR', 'Origin Trial /<br>CFR');
+                h += '<th>' + stageLabel + '</th>';
+            }
             h += '<th>Here</th><th>Warn</th><th></th></tr></thead><tbody id="peRows">';
             for (var r = 0; r < d.rows.length; r++) h += plEditorRowHTML(d.rows[r]);
             h += '</tbody></table>';
@@ -307,7 +314,8 @@
         function plReadEditorRows(editorEl) {
             var rows = [];
             editorEl.querySelectorAll('.pe-row').forEach(function(tr) {
-                var topic = tr.querySelector('.pe-topic').value;
+                var topicInput = tr.querySelector('.pe-topic');
+                var topic = topicInput ? topicInput.value : '';
                 var stages = [];
                 tr.querySelectorAll('.pe-stage-wrap').forEach(function(wrap) {
                     var checkbox = wrap.querySelector('.pe-stage-complete');
@@ -318,7 +326,8 @@
                     topic: topic,
                     stages: stages,
                     hereCol: parseInt(tr.querySelector('.pe-here').value, 10),
-                    warnCol: parseInt(tr.querySelector('.pe-warn').value, 10)
+                    warnCol: parseInt(tr.querySelector('.pe-warn').value, 10),
+                    readonlyTopic: topicInput ? topicInput.dataset.readonlyTopic === 'true' : false
                 });
             });
             return rows;
@@ -337,7 +346,8 @@
                     topic: row.topic,
                     stages: existing.stages || ['', '', '', '', '', ''],
                     hereCol: existing.hereCol ?? -1,
-                    warnCol: existing.warnCol ?? -1
+                    warnCol: existing.warnCol ?? -1,
+                    readonlyTopic: true
                 };
             });
         }

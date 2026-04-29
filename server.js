@@ -379,7 +379,8 @@ function buildPipelineRows(queryResult, workItemMap) {
             topic: wi.fields['System.Title'] || '',
             stages: ['', '', '', '', '', ''],
             hereCol: -1,
-            warnCol: -1
+            warnCol: -1,
+            readonlyTopic: true
         }));
 }
 

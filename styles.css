@@ -248,6 +248,74 @@ td a:hover { text-decoration: underline; }
     pointer-events: none;
 }
 
+/* ── Formatting toolbar font selector ──────────────────────────── */
+
+.fmt-bar {
+    display: flex;
+    gap: 4px;
+    align-items: center;
+    background: #fff;
+    border-radius: 6px;
+    padding: 6px;
+    box-shadow: 0 2px 8px rgba(0, 0, 0, 0.12);
+    position: fixed;
+    z-index: 1000;
+    pointer-events: auto;
+}
+
+.fmt-bar button {
+    padding: 6px 10px;
+    background: transparent;
+    border: 1px solid transparent;
+    border-radius: 4px;
+    color: #333;
+    font-size: 14px;
+    font-weight: 600;
+    cursor: pointer;
+    transition: all 0.15s;
+    outline: none;
+}
+
+.fmt-bar button:hover {
+    background: #f0f0f0;
+    border-color: #ddd;
+}
+
+.fmt-bar button:active {
+    background: #e0e0e0;
+}
+
+.fmt-select {
+    padding: 6px 10px;
+    border: 1px solid transparent;
+    border-radius: 4px;
+    background: #fff;
+    color: #333;
+    font-size: 13px;
+    font-weight: 500;
+    cursor: pointer;
+    outline: none;
+    transition: all 0.15s;
+    min-width: 80px;
+}
+
+.fmt-select:hover {
+    background: #f0f0f0;
+    border-color: #ddd;
+}
+
+.fmt-select:focus {
+    background: #f0f0f0;
+    border-color: var(--accent);
+}
+
+.fmt-sep {
+    width: 1px;
+    height: 20px;
+    background: #ddd;
+    margin: 0 2px;
+}
+
 .editable ul, .editable ol {
     margin-left: 20px;
 }

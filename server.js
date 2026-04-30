@@ -263,11 +263,50 @@ function buildSlides(queryResult, workItemMap, midpointMap) {
     return slides;
 }
 
+/* ── Flat view: one "</> Layout" slide with all leaf epics ──────── */
+
+function buildFlatSlides(queryResult, workItemMap, midpointMap) {
+    const children = {};
+    const targetIds = new Set();
+
+    for (const rel of queryResult.workItemRelations || []) {
+        if (rel.target) targetIds.add(rel.target.id);
+        if (rel.source) (children[rel.source.id] ||= []).push(rel.target.id);
+    }
+
+    const items = [];
+    for (const id of targetIds) {
+        const wi = workItemMap[id];
+        if (!wi) continue;
+        const wiType = String(wi.fields?.['System.WorkItemType'] || '').toLowerCase();
+        if (!wiType.includes('epic')) continue;
+        if ((children[id] || []).length > 0) continue;
+
+        const item = {
+            id,
+            title:       wi.fields['System.Title'] || '',
+            risk:        wi.fields['OSG.RiskAssessment'] || '',
+            riskComment: wi.fields['OSG.RiskAssessmentComment'] || '',
+            state:       wi.fields['System.State'] || '',
+            assignedTo:  wi.fields['System.AssignedTo']?.displayName || ''
+        };
+        if (midpointMap) {
+            const snap = midpointMap[id] || {};
+            item.midpointRisk    = snap.risk || '';
+            item.midpointComment = snap.riskComment || '';
+        }
+        items.push(item);
+    }
+
+    if (items.length === 0) return [];
+    return [{ title: '</> Layout', id: 'flat-layout', items }];
+}
+
 /* ── API route ────────────────────────────────────────────────── */
 
 app.post('/api/slides', async (req, res) => {
     try {
-        const { queryUrl, midpointDate } = req.body;
+        const { queryUrl, midpointDate, flatView } = req.body;
         if (!queryUrl) return res.status(400).json({ error: 'queryUrl is required' });
 
         const { baseUrl, project, queryId } = parseQueryUrl(queryUrl);
@@ -300,7 +339,9 @@ app.post('/api/slides', async (req, res) => {
         }
 
         // 5. Build slides
-        const slides = buildSlides(queryResult, workItemMap, midpointMap);
+        const slides = flatView
+            ? buildFlatSlides(queryResult, workItemMap, midpointMap)
+            : buildSlides(queryResult, workItemMap, midpointMap);
 
         // 6. Provide a link prefix so the UI can link to work items
         const linkBase = `${baseUrl}/${project}/_workitems/edit/`;

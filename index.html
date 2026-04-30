@@ -21,7 +21,10 @@
                    placeholder="Paste ADO query URL…" required>
             <input type="date" id="midpointDate"
                    title="Midpoint date (optional) — snapshot risk fields from this date">
-            <button type="submit" id="runBtn">&#9654; Run</button>
+            <div class="run-controls">
+                <button type="submit" id="runBtn">&#9654; Run</button>
+                <label class="flat-view-label"><input type="checkbox" id="flatViewCheck"> Flat view?</label>
+            </div>
             <button type="button" id="pptxBtn" hidden title="Download as PowerPoint">&#8595; PPTX</button>
         </form>
     </header>
@@ -105,6 +108,7 @@
         let hasMidpoint = false;
         let activeView = 'slides';          // 'slides' | 'retro' | 'doc'
         let lastSlides = null;              // cache for view switches
+        let flatView = localStorage.getItem('ar_flatview') === 'true';
 
         const $deck    = document.getElementById('deck');
         const $nav     = document.getElementById('slideNav');
@@ -126,6 +130,12 @@
         /* Restore saved inputs */
         $query.value   = localStorage.getItem('ar_query') || '';
         $midDate.value = localStorage.getItem('ar_middate') || '';
+        document.getElementById('flatViewCheck').checked = flatView;
+
+        document.getElementById('flatViewCheck').addEventListener('change', function () {
+            flatView = this.checked;
+            localStorage.setItem('ar_flatview', flatView);
+        });
 
         /* ── View toggle ────────────────────────────────────────── */
         document.querySelectorAll('.view-btn').forEach(function (btn) {
@@ -1236,6 +1246,7 @@
                 /* Always fetch all three so toggling views is instant */
                 var slidePayload = { queryUrl: url };
                 if (midDate) slidePayload.midpointDate = midDate;
+                if (flatView) slidePayload.flatView = true;
 
                 var [slideRes, docRes, retroRes] = await Promise.all([
                     fetch('/api/slides', {
@@ -1285,7 +1296,8 @@
             getHasMidpoint: function () { return hasMidpoint; },
             getLastSlides: function () { return lastSlides || []; },
             getPipelineStages: function () { return PL_STAGES; },
-            loadPipeline: function () { return plLoad(); }
+            loadPipeline: function () { return plLoad(); },
+            getFlatView: function () { return flatView; }
         };
 
         /* Show Top-of-Mind + Pipeline immediately (no data needed) */

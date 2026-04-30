@@ -75,6 +75,7 @@ async function fetchWorkItems(baseUrl, project, ids, token) {
     const fields = [
         'System.Id', 'System.Title', 'System.WorkItemType',
         'System.State', 'System.AssignedTo',
+        'System.IterationPath', 'System.AreaPath',
         'OSG.RiskAssessment', 'OSG.RiskAssessmentComment',
         'Microsoft.VSTS.Scheduling.OriginalEstimate',
         'OSG.OverallComments'
@@ -90,6 +91,66 @@ async function fetchWorkItems(baseUrl, project, ids, token) {
         for (const wi of data.value) map[wi.id] = wi;
     }
     return map;
+}
+
+function parseIterationLevel2Token(iterationPath) {
+    const parts = String(iterationPath || '').split('\\').filter(Boolean);
+    const level2 = parts[1] || '';
+    if (!level2) return '';
+    const dashParts = level2.split('-');
+    return dashParts.length > 1 ? dashParts.slice(1).join('-') : level2;
+}
+
+function parseAreaLevel4(areaPath) {
+    const parts = String(areaPath || '').split('\\').filter(Boolean);
+    return parts[3] || '';
+}
+
+function findFirstLeafEpic(queryResult, workItemMap) {
+    const children = {};
+    const orderedTargets = [];
+    const seenTargets = new Set();
+
+    for (const rel of queryResult.workItemRelations || []) {
+        if (rel.source) (children[rel.source.id] ||= []).push(rel.target.id);
+        if (rel.target && !seenTargets.has(rel.target.id)) {
+            orderedTargets.push(rel.target.id);
+            seenTargets.add(rel.target.id);
+        }
+    }
+
+    for (const id of orderedTargets) {
+        const wi = workItemMap[id];
+        const wiType = String(wi?.fields?.['System.WorkItemType'] || '').toLowerCase();
+        if (!wi || !wiType.includes('epic')) continue;
+        if ((children[id] || []).length > 0) continue;
+        return wi;
+    }
+
+    return null;
+}
+
+function buildTitleContext(queryResult, workItemMap) {
+    const leafEpic = findFirstLeafEpic(queryResult, workItemMap);
+    if (!leafEpic) {
+        return {
+            baseTeamName: '',
+            flatSlideTitle: 'Layout'
+        };
+    }
+
+    const iterationToken = parseIterationLevel2Token(leafEpic.fields['System.IterationPath']);
+    const areaLevel4 = parseAreaLevel4(leafEpic.fields['System.AreaPath']);
+
+    let flatSlideTitle = 'Layout';
+    if (iterationToken && areaLevel4) flatSlideTitle = `${iterationToken} - ${areaLevel4}`;
+    else if (iterationToken) flatSlideTitle = `${iterationToken}`;
+    else if (areaLevel4) flatSlideTitle = `${areaLevel4}`;
+
+    return {
+        baseTeamName: areaLevel4 || '',
+        flatSlideTitle
+    };
 }
 
 /* ── Revision history lookup ───────────────────────────────────── */
@@ -263,9 +324,9 @@ function buildSlides(queryResult, workItemMap, midpointMap) {
     return slides;
 }
 
-/* ── Flat view: one "</> Layout" slide with all leaf epics ──────── */
+/* ── Flat view: one "Layout" slide with all leaf epics ───────────── */
 
-function buildFlatSlides(queryResult, workItemMap, midpointMap) {
+function buildFlatSlides(queryResult, workItemMap, midpointMap, flatSlideTitle) {
     const children = {};
     const targetIds = new Set();
 
@@ -299,7 +360,7 @@ function buildFlatSlides(queryResult, workItemMap, midpointMap) {
     }
 
     if (items.length === 0) return [];
-    return [{ title: '</> Layout', id: 'flat-layout', items }];
+    return [{ title: flatSlideTitle || 'Layout', id: 'flat-layout', items }];
 }
 
 /* ── API route ────────────────────────────────────────────────── */
@@ -338,15 +399,19 @@ app.post('/api/slides', async (req, res) => {
             );
         }
 
+        const titleContext = buildTitleContext(queryResult, workItemMap);
+        const baseSlideTitle = titleContext.flatSlideTitle;
+        const baseTeamName = titleContext.baseTeamName;
+
         // 5. Build slides
         const slides = flatView
-            ? buildFlatSlides(queryResult, workItemMap, midpointMap)
+            ? buildFlatSlides(queryResult, workItemMap, midpointMap, baseSlideTitle)
             : buildSlides(queryResult, workItemMap, midpointMap);
 
         // 6. Provide a link prefix so the UI can link to work items
         const linkBase = `${baseUrl}/${project}/_workitems/edit/`;
 
-        res.json({ slides, linkBase, hasMidpoint: !!midpointDate });
+        res.json({ slides, linkBase, hasMidpoint: !!midpointDate, baseSlideTitle, baseTeamName });
     } catch (err) {
         console.error('❌', err);
         res.status(500).json({ error: err.message });

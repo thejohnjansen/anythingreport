@@ -1,4 +1,57 @@
 (function () {
+    var DEFAULT_THEME = {
+        titleFont: 'Aptos Display',
+        titleFontSize: 28,
+        titleX: 2.0,
+        titleY: 0.18,
+        titleW: 10.6,
+        titleH: 0.62,
+        bodyFont: 'Aptos',
+        emojiFont: 'Segoe UI Emoji',
+        bgColor: 'FFFFFF',
+        titleColor: '0E2841',
+        bodyColor: '000000',
+        mutedTextColor: '467886',
+        headerFillColor: '156082',
+        rowAltColor: 'F8FAFC',
+        borderColor: 'D1D5DB',
+        linkColor: '467886',
+        pipelineLineColor: '999999',
+        pipelineCompleteColor: '4EA72E',
+        pipelineCommittedFillColor: 'E9F7EF',
+        pipelineFutureColor: '9CA3AF',
+        topicPillFillColor: 'DDDDDD',
+        topicPillBorderColor: '666666',
+        topicPillRadius: 0.12,
+        topicPillTextColor: '0E2841',
+        backgroundImageUrl: ''
+    };
+
+    function getTheme() {
+        var userTheme = window.__arPptxTheme || {};
+        return Object.assign({}, DEFAULT_THEME, userTheme);
+    }
+
+    function toDataUrl(url) {
+        if (!url) return Promise.resolve('');
+        return fetch(url)
+            .then(function (res) {
+                if (!res.ok) throw new Error('Failed to load background image: ' + url);
+                return res.blob();
+            })
+            .then(function (blob) {
+                return new Promise(function (resolve, reject) {
+                    var reader = new FileReader();
+                    reader.onloadend = function () { resolve(reader.result || ''); };
+                    reader.onerror = reject;
+                    reader.readAsDataURL(blob);
+                });
+            })
+            .catch(function () {
+                return '';
+            });
+    }
+
     function stripHtml(html) {
         var d = document.createElement('div');
         d.innerHTML = html;
@@ -131,7 +184,7 @@
     function riskColor(risk) {
         var r = (risk || '').toLowerCase();
         if (r.includes('on track')) return '16A34A';
-        if (r.includes('at risk')) return 'D97706';
+        if (r.includes('at risk')) return 'B8860B';
         if (r.includes('off track')) return 'DC2626';
         return '888888';
     }
@@ -144,18 +197,58 @@
         return '\u2014';
     }
 
-    function pptxSlideHeader(slide, title) {
-        slide.background = { color: 'FFFFFF' };
-        slide.addText(title, {
-            x: 0.5,
-            y: 0.25,
-            w: 12.6,
-            h: 0.65,
-            fontSize: 24,
+    function riskFillColor(risk) {
+        var r = (risk || '').toLowerCase();
+        if (r.includes('on track')) return 'E9F7EF';
+        if (r.includes('at risk')) return 'FFF6DB';
+        if (r.includes('off track')) return 'FDECEC';
+        return 'F5F5F5';
+    }
+
+    function tableNoBorder() {
+        return { type: 'solid', pt: 0, color: 'FFFFFF' };
+    }
+
+    function tableHeaderBorder(theme) {
+        return [
+            { type: 'solid', pt: 1.2, color: theme.titleColor },
+            tableNoBorder(),
+            { type: 'solid', pt: 1.2, color: theme.titleColor },
+            tableNoBorder()
+        ];
+    }
+
+    function tableRowBottomBorder(theme) {
+        return [
+            tableNoBorder(),
+            tableNoBorder(),
+            { type: 'solid', pt: 0.8, color: theme.borderColor },
+            tableNoBorder()
+        ];
+    }
+
+    function pptxSlideHeader(slide, title, theme, bgImageData) {
+        var headerTitle = String(title || '').replace(/^<\/>\s*/, '');
+        slide.background = { color: theme.bgColor };
+        if (bgImageData) {
+            slide.addImage({
+                data: bgImageData,
+                x: 0,
+                y: 0,
+                w: 13.333,
+                h: 7.5
+            });
+        }
+        slide.addText(headerTitle, {
+            x: theme.titleX,
+            y: theme.titleY,
+            w: theme.titleW,
+            h: theme.titleH,
+            fontSize: theme.titleFontSize,
             bold: true,
-            color: '16213E',
-            fontFace: 'Segoe UI',
-            valign: 'top'
+            color: theme.titleColor,
+            fontFace: theme.titleFont,
+            valign: 'mid'
         });
     }
 
@@ -166,7 +259,9 @@
             hasMidpoint: !!state.getHasMidpoint(),
             lastSlides: state.getLastSlides() || [],
             PL_STAGES: state.getPipelineStages() || [],
-            plData: state.loadPipeline()
+            plData: state.loadPipeline(),
+            baseSlideTitle: state.getBaseSlideTitle ? state.getBaseSlideTitle() : 'Layout',
+            baseTeamName: state.getBaseTeamName ? state.getBaseTeamName() : ''
         };
     }
 
@@ -177,12 +272,42 @@
         return v;
     }
 
-    function downloadPptx() {
+    function parsePipelineStageValue(value) {
+        var raw = (value || '').trim();
+        if (!raw) return { complete: false, committed: false, label: '' };
+
+        var lower = raw.toLowerCase();
+        if (lower === 'complete' || lower === 'completed') {
+            return { complete: true, committed: false, label: '' };
+        }
+        if (lower.indexOf('complete|') === 0 || lower.indexOf('completed|') === 0) {
+            var pipeIndex = raw.indexOf('|');
+            var label = pipeIndex >= 0 ? raw.slice(pipeIndex + 1).trim() : '';
+            return { complete: true, committed: false, label: label };
+        }
+        if (lower === 'committed' || lower === 'commit') {
+            return { complete: false, committed: true, label: '' };
+        }
+        if (lower.indexOf('committed|') === 0 || lower.indexOf('commit|') === 0) {
+            var pipeIndexCommitted = raw.indexOf('|');
+            var committedLabel = pipeIndexCommitted >= 0 ? raw.slice(pipeIndexCommitted + 1).trim() : '';
+            return { complete: false, committed: true, label: committedLabel };
+        }
+        return { complete: false, committed: false, label: normalizePipelineStageValue(raw) };
+    }
+
+    async function downloadPptx() {
         var state = getState();
+        var theme = getTheme();
+        var bgImageData = await toDataUrl(theme.backgroundImageUrl);
         var hasMidpoint = state.hasMidpoint;
         var lastSlides = state.lastSlides;
         var PL_STAGES = state.PL_STAGES;
         var plData = state.plData;
+        var baseSlideTitle = state.baseSlideTitle || 'Layout';
+        var baseTeamName = (state.baseTeamName || '').trim();
+        var topOfMindTitle = baseTeamName ? ('Top of Mind - ' + baseTeamName) : 'Top of Mind';
+        var pipelineBaseTitle = baseTeamName ? ('Pipeline - ' + baseTeamName) : 'Pipeline';
 
         var pres = new PptxGenJS();
         pres.layout = 'LAYOUT_WIDE'; // 13.33 x 7.5 inches
@@ -194,7 +319,7 @@
 
         // Slide 1: Top of Mind
         var s1 = pres.addSlide();
-        pptxSlideHeader(s1, 'Top of Mind');
+        pptxSlideHeader(s1, topOfMindTitle, theme, bgImageData);
         var tomEl = document.getElementById('tom');
         var tomHtml = tomEl ? tomEl.innerHTML : '';
         var tomRuns = htmlToPptRuns(tomHtml);
@@ -205,16 +330,15 @@
                 w: PPT_W,
                 h: 6.1,
                 fontSize: 14,
-                color: '1F2937',
-                fontFace: 'Segoe UI',
+                color: theme.bodyColor,
+                fontFace: theme.bodyFont,
                 valign: 'top',
                 wrap: true
             });
         }
 
         // Slide 2 (+ optional Slide 3): Pipeline — paginated
-        var plTitleEl = document.querySelector('.pl-title');
-        var plTitle = (plTitleEl && plTitleEl.textContent) ? plTitleEl.textContent : 'Pipeline';
+        var plTitle = pipelineBaseTitle;
         var plHeaders = ['INVESTIGATE', 'EXPLAINER /\nDESIGN DOC', 'IMPLEMENTATION', 'DEV TRIAL', 'ORIGIN TRIAL /\nCFR', 'SHIP'];
 
         var plChartX  = 0.20;
@@ -238,12 +362,12 @@
             var pageRows = plPageGroups[plPg];
             var spl = pres.addSlide();
             var pageTitle = plTotalPages > 1 ? plTitle + ' (' + (plPg + 1) + '/' + plTotalPages + ')' : plTitle;
-            pptxSlideHeader(spl, pageTitle);
+            pptxSlideHeader(spl, pageTitle, theme, bgImageData);
 
             if (pageRows.length === 0) {
                 spl.addText('No pipeline data \u2014 use the \u270e Edit button in the web view to add rows.', {
                     x: PPT_X, y: TABLE_TOP_Y, w: PPT_W, h: 0.6,
-                    fontSize: 13, color: '888888', fontFace: 'Segoe UI', italic: true
+                    fontSize: 13, color: '888888', fontFace: theme.bodyFont, italic: true
                 });
                 continue;
             }
@@ -266,6 +390,13 @@
                         line: { color: opts.symbolColor, pt: opts.symbolType === 'dotOpen' ? 2 : 1.2 },
                         fill: { color: opts.symbolType === 'dotFilled' ? opts.symbolColor : 'FFFFFF' }
                     });
+                } else if (opts.symbolType === 'dotFilledBorder') {
+                    var db = opts.symbolDiameter || 0.18;
+                    slide.addShape(pres.ShapeType.ellipse, {
+                        x: lx + (legSymW - db) / 2, y: ly + 0.03, w: db, h: db,
+                        line: { color: opts.symbolColor, pt: 2 },
+                        fill: { color: opts.fillColor || 'FFFFFF' }
+                    });
                 } else {
                     slide.addText(symbol, {
                         x: lx, y: ly, w: legSymW, h: 0.2,
@@ -276,15 +407,15 @@
                 }
                 slide.addText(text, {
                     x: lx + legSymW + 0.04, y: ly, w: legTxtW, h: 0.2,
-                    fontSize: 9, color: '4B5563', fontFace: 'Segoe UI'
+                    fontSize: 9, color: theme.mutedTextColor, fontFace: theme.bodyFont
                 });
             }
 
-            addPlLegendItem(spl, 0, 0, '\u25BC', 'Roughly where we are',        { symbolSize: 11, symbolBold: true, symbolColor: '2A8E2A' });
-            addPlLegendItem(spl, 0, 1, '\u26A0\uFE0F', 'Risk Identified',         { symbolSize: 12, symbolColor: 'D97706', symbolFont: 'Segoe UI Emoji' });
-            addPlLegendItem(spl, 1, 0, '', 'Completed',                           { symbolType: 'dotFilled', symbolColor: '2A8E2A', symbolDiameter: 0.18 });
-            addPlLegendItem(spl, 1, 1, '', 'Committed for the current cycle',     { symbolType: 'dotOpen',   symbolColor: '2A8E2A', symbolDiameter: 0.18 });
-            addPlLegendItem(spl, 1, 2, '', 'Planned for a future cycle',          { symbolType: 'dotOpen',   symbolColor: '9CA3AF', symbolDiameter: 0.18 });
+            addPlLegendItem(spl, 0, 0, '\u25BC', 'Roughly where we are',        { symbolSize: 11, symbolBold: true, symbolColor: theme.pipelineCompleteColor });
+            addPlLegendItem(spl, 0, 1, '\u26A0\uFE0F', 'Risk Identified',         { symbolSize: 12, symbolColor: 'D97706', symbolFont: theme.emojiFont });
+            addPlLegendItem(spl, 1, 0, '', 'Completed',                           { symbolType: 'dotFilled', symbolColor: theme.pipelineCompleteColor, symbolDiameter: 0.18 });
+            addPlLegendItem(spl, 1, 1, '', 'Committed for the current cycle',     { symbolType: 'dotFilledBorder', symbolColor: theme.pipelineCompleteColor, fillColor: theme.pipelineCommittedFillColor, symbolDiameter: 0.18 });
+            addPlLegendItem(spl, 1, 2, '', 'Planned for a future cycle',          { symbolType: 'dotOpen',   symbolColor: theme.pipelineFutureColor, symbolDiameter: 0.18 });
 
             // Anchor the pipeline directly below the legend instead of centering it vertically.
             var plLegendBottomY = legY + legRowH * 3 + 0.02;
@@ -294,7 +425,7 @@
                     x: plChartX + plTopicW + ph * plStageColW,
                     y: plHeaderY, w: plStageColW, h: 0.36,
                     align: 'center', valign: 'mid', bold: true,
-                    fontSize: 9, color: '666666', fontFace: 'Segoe UI'
+                    fontSize: 9, color: '666666', fontFace: theme.bodyFont
                 });
             }
 
@@ -321,14 +452,14 @@
                 spl.addShape(pres.ShapeType.roundRect, {
                     x: plChartX, y: centerY - plTopicBoxH * 0.5,
                     w: plTopicW - 0.18, h: plTopicBoxH,
-                    rectRadius: 0.05,
-                    line: { color: 'DDDDDD', pt: 1 }, fill: { color: 'DDDDDD' }
+                    rectRadius: theme.topicPillRadius,
+                    line: { color: theme.topicPillBorderColor, pt: 1.2 }, fill: { color: theme.topicPillFillColor }
                 });
                 spl.addText(row.topic || '', {
                     x: plChartX + 0.06, y: centerY - plTopicTextH * 0.5,
                     w: plTopicW - 0.30, h: plTopicTextH,
                     align: 'center', valign: 'mid', bold: true,
-                    fontSize: 10, color: '333333', fontFace: 'Segoe UI'
+                    fontSize: 10, color: theme.topicPillTextColor, fontFace: theme.bodyFont
                 });
 
                 // Connector line
@@ -337,23 +468,25 @@
                     y: centerY,
                     w: (plChartX + plTopicW + plStageColW * 5.5 + plNodeD * 0.5) - (plChartX + plTopicW - 0.18),
                     h: 0,
-                    line: { color: '999999', pt: 5 }
+                    line: { color: theme.pipelineLineColor, pt: 5 }
                 });
 
                 // Stage nodes
                 for (var sc = 0; sc < 6; sc++) {
                     var cx = plChartX + plTopicW + plStageColW * (sc + 0.5);
-                    var v  = normalizePipelineStageValue((row.stages && row.stages[sc]) || '');
+                    var parsedStage = parsePipelineStageValue((row.stages && row.stages[sc]) || '');
+                    var v  = parsedStage.label;
                     var isHere = row.hereCol === sc;
                     var isWarn = row.warnCol === sc;
-                    var isDone = v === 'complete';
+                    var isDone = parsedStage.complete;
+                    var isCommitted = !!parsedStage.committed;
 
                     if (isHere) {
-                        spl.addText('\u25BC', {
-                            x: cx - 0.11, y: centerY - plNodeD * 0.70 - 0.09,
-                            w: 0.22, h: 0.22,
-                            align: 'center', color: '2A8E2A', bold: true,
-                            fontSize: 17, fontFace: 'Segoe UI'
+                        spl.addText('\u27A4', {
+                            x: cx - plNodeD * 0.5 - 0.23, y: centerY - 0.11,
+                            w: 0.24, h: 0.22,
+                            align: 'center', color: theme.pipelineCompleteColor, bold: true,
+                            fontSize: 14, fontFace: theme.bodyFont
                         });
                     }
 
@@ -362,7 +495,7 @@
                             x: cx - plNodeD * 0.5 - 0.28, y: centerY - 0.14,
                             w: 0.26, h: 0.26,
                             align: 'center', valign: 'mid',
-                            fontSize: 19, fontFace: 'Segoe UI Emoji'
+                            fontSize: 19, fontFace: theme.emojiFont
                         });
                     }
 
@@ -370,26 +503,37 @@
                         spl.addShape(pres.ShapeType.ellipse, {
                             x: cx - plNodeD * 0.5, y: centerY - plNodeD * 0.5,
                             w: plNodeD, h: plNodeD,
-                            line: { color: '2A8E2A', pt: 1.5 }, fill: { color: '2A8E2A' }
+                            line: { color: theme.pipelineCompleteColor, pt: 1.5 }, fill: { color: theme.pipelineCompleteColor }
                         });
+                        if (v) {
+                            spl.addText(v, {
+                                x: cx - plNodeD * 0.5 + 0.02, y: centerY - plNodeD * 0.5 + 0.02,
+                                w: plNodeD - 0.04, h: plNodeD - 0.04,
+                                align: 'center', valign: 'mid', fit: 'shrink',
+                                fontSize: 9, bold: true,
+                                color: '000000', fontFace: theme.bodyFont
+                            });
+                        }
                         continue;
                     }
 
-                    if (v) {
-                        var committed = row.hereCol >= 0 && sc <= row.hereCol;
+                    if (v || isCommitted) {
+                        var committed = isCommitted;
                         spl.addShape(pres.ShapeType.ellipse, {
                             x: cx - plNodeD * 0.5, y: centerY - plNodeD * 0.5,
                             w: plNodeD, h: plNodeD,
-                            line: { color: committed ? '2A8E2A' : 'AAAAAA', pt: 2.5 },
-                            fill: { color: 'FFFFFF' }
+                            line: { color: committed ? theme.pipelineCompleteColor : theme.pipelineFutureColor, pt: 2.5 },
+                            fill: { color: committed ? theme.pipelineCommittedFillColor : 'FFFFFF' }
                         });
-                        spl.addText(v, {
-                            x: cx - plNodeD * 0.5 + 0.02, y: centerY - plNodeD * 0.5 + 0.02,
-                            w: plNodeD - 0.04, h: plNodeD - 0.04,
-                            align: 'center', valign: 'mid', fit: 'shrink',
-                            fontSize: 10, bold: true,
-                            color: committed ? '333333' : '666666', fontFace: 'Segoe UI'
-                        });
+                        if (v) {
+                            spl.addText(v, {
+                                x: cx - plNodeD * 0.5 + 0.02, y: centerY - plNodeD * 0.5 + 0.02,
+                                w: plNodeD - 0.04, h: plNodeD - 0.04,
+                                align: 'center', valign: 'mid', fit: 'shrink',
+                                fontSize: 10, bold: true,
+                                color: committed ? theme.topicPillTextColor : '666666', fontFace: theme.bodyFont
+                            });
+                        }
                     }
                 }
             }
@@ -400,7 +544,7 @@
             for (var si = 0; si < lastSlides.length; si++) {
                 var sd = lastSlides[si];
                 var fs = pres.addSlide();
-                pptxSlideHeader(fs, sd.title);
+                pptxSlideHeader(fs, sd.title, theme, bgImageData);
 
                 if (sd.items.length === 0) {
                     fs.addText('No child items', {
@@ -411,7 +555,7 @@
                         fontSize: 12,
                         color: '888888',
                         italic: true,
-                        fontFace: 'Segoe UI'
+                        fontFace: theme.bodyFont
                     });
                     continue;
                 }
@@ -420,43 +564,50 @@
                 var colW;
                 if (hasMidpoint) {
                     cols = ['ID', 'Title', 'Midpoint Risk', 'Midpoint Details', 'Final Risk', 'Final Details'];
-                    colW = [1, 3.5, 1, 3.23, 1, 3.22];
+                    colW = [1, 3.2, 1.25, 2.95, 1.25, 3.3];
                 } else {
                     cols = ['ID', 'Title', 'Risk', 'Details'];
-                    colW = [1, 4, 1, 6];
+                    colW = [1, 3.7, 1.35, 5.95];
                 }
 
+                var hdrBorder = tableHeaderBorder(theme);
+                var rowBorder = tableRowBottomBorder(theme);
+
                 var tblHdr = cols.map(function (c) {
-                    return { text: c, options: { bold: true, color: 'FFFFFF', fill: { color: '16213E' }, fontSize: 10, align: 'center', valign: 'middle' } };
+                    return { text: c, options: { bold: true, color: '000000', fill: { color: 'FFFFFF' }, fontSize: 12, align: 'center', valign: 'middle', fontFace: theme.bodyFont, border: hdrBorder } };
                 });
 
-                var tblRows = sd.items.map(function (it, idx) {
-                    var bg = (idx % 2 === 0) ? 'F8FAFC' : 'FFFFFF';
+                var tblRows = sd.items.map(function (it) {
+                    var finalBg = riskFillColor(it.risk);
+                    var midpointBg = riskFillColor(it.midpointRisk);
                     var idCell = {
                         text: String(it.id),
                         options: {
-                            fontSize: 10,
-                            color: '0078d4',
-                            fill: { color: bg },
+                            fontSize: 12,
+                            color: '000000',
+                            fill: { color: 'FFFFFF' },
                             align: 'center',
-                            valign: 'middle'
+                            valign: 'middle',
+                            fontFace: theme.bodyFont,
+                            border: rowBorder,
+                            hyperlink: { url: WORKITEM_LINK_BASE + it.id }
                         }
                     };
                     if (hasMidpoint) {
                         return [
                             idCell,
-                            { text: it.title, options: { fontSize: 10, color: '1F2937', fill: { color: bg } } },
-                            { text: riskLabel(it.midpointRisk), options: { fontSize: 10, bold: true, color: riskColor(it.midpointRisk), fill: { color: bg }, align: 'center', valign: 'middle' } },
-                            { text: it.midpointComment || '\u2014', options: { fontSize: 10, color: '4B5563', fill: { color: bg } } },
-                            { text: riskLabel(it.risk), options: { fontSize: 10, bold: true, color: riskColor(it.risk), fill: { color: bg }, align: 'center', valign: 'middle' } },
-                            { text: it.riskComment || '\u2014', options: { fontSize: 10, color: '4B5563', fill: { color: bg } } }
+                            { text: it.title, options: { fontSize: 12, color: '000000', fill: { color: 'FFFFFF' }, fontFace: theme.bodyFont, border: rowBorder } },
+                            { text: riskLabel(it.midpointRisk), options: { fontSize: 12, bold: true, color: riskColor(it.midpointRisk), fill: { color: midpointBg }, align: 'center', valign: 'middle', fontFace: theme.bodyFont, border: rowBorder } },
+                            { text: it.midpointComment || '\u2014', options: { fontSize: 12, color: '000000', fill: { color: 'FFFFFF' }, fontFace: theme.bodyFont, border: rowBorder } },
+                            { text: riskLabel(it.risk), options: { fontSize: 12, bold: true, color: riskColor(it.risk), fill: { color: finalBg }, align: 'center', valign: 'middle', fontFace: theme.bodyFont, border: rowBorder } },
+                            { text: it.riskComment || '\u2014', options: { fontSize: 12, color: '000000', fill: { color: 'FFFFFF' }, fontFace: theme.bodyFont, border: rowBorder } }
                         ];
                     }
                     return [
                         idCell,
-                        { text: it.title, options: { fontSize: 10, color: '1F2937', fill: { color: bg } } },
-                        { text: riskLabel(it.risk), options: { fontSize: 10, bold: true, color: riskColor(it.risk), fill: { color: bg } } },
-                        { text: it.riskComment || '\u2014', options: { fontSize: 10, color: '4B5563', fill: { color: bg } } }
+                        { text: it.title, options: { fontSize: 12, color: '000000', fill: { color: 'FFFFFF' }, fontFace: theme.bodyFont, border: rowBorder } },
+                        { text: riskLabel(it.risk), options: { fontSize: 12, bold: true, color: riskColor(it.risk), fill: { color: finalBg }, align: 'center', valign: 'middle', fontFace: theme.bodyFont, border: rowBorder } },
+                        { text: it.riskComment || '\u2014', options: { fontSize: 12, color: '000000', fill: { color: 'FFFFFF' }, fontFace: theme.bodyFont, border: rowBorder } }
                     ];
                 });
 
@@ -477,14 +628,14 @@
                     var pageSlide = (p === 0) ? fs : pres.addSlide();
 
                     if (p > 0) {
-                        pptxSlideHeader(pageSlide, sd.title + ' (cont.)');
+                        pptxSlideHeader(pageSlide, sd.title + ' (cont.)', theme, bgImageData);
                     }
 
                     pageSlide.addTable([tblHdr].concat(pageRows), {
                         x: PPT_X,
                         y: TABLE_TOP_Y,
                         w: PPT_W,
-                        border: { type: 'solid', pt: 0.5, color: 'D1D5DB' },
+                        border: tableNoBorder(),
                         rowH: TABLE_ROW_H,
                         colW: colW
                     });

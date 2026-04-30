@@ -23,8 +23,8 @@
                    title="Midpoint date (optional) — snapshot risk fields from this date">
             <div class="run-controls">
                 <button type="submit" id="runBtn">&#9654; Run</button>
-                <label class="flat-view-label"><input type="checkbox" id="flatViewCheck"> Flat view?</label>
             </div>
+            <label class="flat-view-label flat-view-under-run"><input type="checkbox" id="flatViewCheck"> Flat view?</label>
             <button type="button" id="pptxBtn" hidden title="Download as PowerPoint">&#8595; PPTX</button>
         </form>
     </header>
@@ -109,6 +109,8 @@
         let activeView = 'slides';          // 'slides' | 'retro' | 'doc'
         let lastSlides = null;              // cache for view switches
         let flatView = localStorage.getItem('ar_flatview') === 'true';
+        let baseSlideTitle = 'Layout';
+        let baseTeamName = '';
 
         const $deck    = document.getElementById('deck');
         const $nav     = document.getElementById('slideNav');
@@ -259,7 +261,7 @@
         /* ── Pipeline helpers ────────────────────────────────────── */
         var PL_STAGES  = ['Investigate','Explainer / Design Doc','Implementation','Dev Trial','Origin Trial / CFR','Ship'];
         var PL_HEADERS = ['INVESTIGATE','EXPLAINER/<br>DESIGN DOC','IMPLEMENTATION','DEV TRIAL','ORIGIN TRIAL/<br>CFR','SHIP'];
-        var DEFAULT_PIPELINE_TITLE = '</> Pipeline';
+        var DEFAULT_PIPELINE_TITLE = 'Pipeline';
 
         function escapeHtml(s) {
             return String(s || '')
@@ -267,6 +269,13 @@
                 .replace(/</g, '&lt;')
                 .replace(/>/g, '&gt;')
                 .replace(/"/g, '&quot;');
+        }
+
+        function titleHtmlWithTeam(prefix) {
+            var p = escapeHtml(prefix);
+            var team = (baseTeamName || '').trim();
+            if (!team) return p + ' <span class="title-hint">Team Name will be populated automatically</span>';
+            return p + ' - ' + escapeHtml(team);
         }
 
         function normalizePipelineTitle(title) {
@@ -294,20 +303,52 @@
             return v;
         }
 
+        function parsePipelineStageValue(value) {
+            var raw = (value || '').trim();
+            if (!raw) return { complete: false, committed: false, label: '' };
+
+            var lower = raw.toLowerCase();
+            if (lower === 'complete' || lower === 'completed') {
+                return { complete: true, committed: false, label: '' };
+            }
+
+            if (lower.indexOf('complete|') === 0 || lower.indexOf('completed|') === 0) {
+                var pipeIndex = raw.indexOf('|');
+                var label = pipeIndex >= 0 ? raw.slice(pipeIndex + 1).trim() : '';
+                return { complete: true, committed: false, label: label };
+            }
+
+            if (lower === 'committed' || lower === 'commit') {
+                return { complete: false, committed: true, label: '' };
+            }
+
+            if (lower.indexOf('committed|') === 0 || lower.indexOf('commit|') === 0) {
+                var pipeIndexCommitted = raw.indexOf('|');
+                var committedLabel = pipeIndexCommitted >= 0 ? raw.slice(pipeIndexCommitted + 1).trim() : '';
+                return { complete: false, committed: true, label: committedLabel };
+            }
+
+            return { complete: false, committed: false, label: normalizePipelineStageValue(raw) };
+        }
+
         function plStageEditorCellHTML(value) {
-            var normalized = normalizePipelineStageValue(value);
-            var checked = (normalized === 'complete');
-            var label = checked ? '' : normalized;
+            var parsed = parsePipelineStageValue(value);
+            var completeChecked = parsed.complete;
+            var committedChecked = !!parsed.committed;
+            var label = parsed.label || '';
             return '<td><label class="pe-stage-wrap">' +
-                '<input type="checkbox" class="pe-stage-complete" title="Complete?"' + (checked ? ' checked' : '') + '>' +
-                '<input type="text" class="pe-stage-input" value="' + label.replace(/"/g, '&quot;') + '" placeholder="Cycle"' + (checked ? ' disabled' : '') + '></label></td>';
+                '<span class="pe-stage-flags">' +
+                '<label class="pe-stage-flag" title="Completed"><input type="checkbox" class="pe-stage-complete"' + (completeChecked ? ' checked' : '') + '><span>C</span></label>' +
+                '<label class="pe-stage-flag" title="Committed"><input type="checkbox" class="pe-stage-committed"' + (committedChecked ? ' checked' : '') + '><span>M</span></label>' +
+                '</span>' +
+                '<input type="text" class="pe-stage-input" value="' + label.replace(/"/g, '&quot;') + '" placeholder="Cycle"></label></td>';
         }
 
         function plVizHTML(pl) {
             if (!pl || !pl.rows || !pl.rows.length)
                 return '<p class="pv-empty">Click <b>&#9998; Edit</b> to add pipeline rows.</p>';
             var h = '<div class="pv-legend">' +
-                '<span class="pv-leg"><span class="pv-leg-arrow">&#9660;</span> Roughly &ldquo;Where we are&rdquo;</span>' +
+                '<span class="pv-leg"><span class="pv-leg-arrow">&#11015;</span> Roughly &ldquo;Where we are&rdquo;</span>' +
                 '<span class="pv-leg"><span class="pv-leg-circ complete"></span> Completed</span>' +
                 '<span class="pv-leg"><span class="pv-leg-circ committed"></span> Committed for current cycle</span>' +
                 '<span class="pv-leg"><span class="pv-leg-circ future"></span> Planned for future cycle</span></div>';
@@ -319,18 +360,20 @@
                 h += '<div class="pv-row"><div class="pv-topic"><span>' + (row.topic || '') + '</span></div>';
                 h += '<div class="pv-stages"><div class="pv-line"></div>';
                 for (var c = 0; c < 6; c++) {
-                    var v = normalizePipelineStageValue(row.stages && row.stages[c] || '');
+                    var parsed = parsePipelineStageValue(row.stages && row.stages[c] || '');
+                    var v = parsed.label;
                     var here = (row.hereCol === c);
                     var warn = (row.warnCol === c);
-                    var done = (v === 'complete');
-                    var empty = (v === '');
+                    var done = parsed.complete;
+                    var committedMark = !!parsed.committed;
+                    var empty = (!done && !committedMark && v === '');
                     h += '<div class="pv-cell">';
-                    if (here) h += '<div class="pv-arrow">&#9660;</div>';
+                    if (here) h += '<div class="pv-arrow">&#11015;</div>';
                     if (warn) h += '<div class="pv-warn" title="Watch item">&#9888;&#65039;</div>';
                     if (done) {
-                        h += '<div class="pv-node complete"></div>';
+                        h += '<div class="pv-node complete' + (v ? ' labeled' : '') + '">' + (v || '') + '</div>';
                     } else if (!empty) {
-                        var cls = (row.hereCol >= 0 && c <= row.hereCol) ? 'committed' : 'future';
+                        var cls = committedMark ? 'committed' : 'future';
                         h += '<div class="pv-node ' + cls + '">' + v + '</div>';
                     }
                     h += '</div>';
@@ -380,7 +423,7 @@
                 var checkbox = wrap.querySelector('.pe-stage-complete');
                 var input = wrap.querySelector('.pe-stage-input');
                 if (!checkbox || !input) return;
-                input.disabled = checkbox.checked;
+                input.disabled = false;
             });
         }
 
@@ -409,9 +452,17 @@
                 var topic = topicInput ? topicInput.value : '';
                 var stages = [];
                 tr.querySelectorAll('.pe-stage-wrap').forEach(function(wrap) {
-                    var checkbox = wrap.querySelector('.pe-stage-complete');
+                    var completeCb = wrap.querySelector('.pe-stage-complete');
+                    var committedCb = wrap.querySelector('.pe-stage-committed');
                     var input = wrap.querySelector('.pe-stage-input');
-                    stages.push(checkbox && checkbox.checked ? 'complete' : normalizePipelineStageValue(input ? input.value : ''));
+                    var label = normalizePipelineStageValue(input ? input.value : '');
+                    if (completeCb && completeCb.checked) {
+                        stages.push(label ? ('complete|' + label) : 'complete');
+                    } else if (committedCb && committedCb.checked) {
+                        stages.push(label ? ('committed|' + label) : 'committed');
+                    } else {
+                        stages.push(label);
+                    }
                 });
                 rows.push({
                     topic: topic,
@@ -491,16 +542,25 @@
             var $queryRun = slideEl.querySelector('.pl-query-run');
 
             function wireStageControls(container) {
-                container.querySelectorAll('.pe-stage-complete').forEach(function (checkbox) {
-                    if (checkbox.dataset.wired === 'true') return;
-                    checkbox.dataset.wired = 'true';
-                    checkbox.addEventListener('change', function () {
-                        var wrap = checkbox.closest('.pe-stage-wrap');
-                        if (!wrap) return;
-                        var input = wrap.querySelector('.pe-stage-input');
-                        if (!input) return;
-                        input.disabled = checkbox.checked;
-                    });
+                container.querySelectorAll('.pe-stage-wrap').forEach(function (wrap) {
+                    var completeCb = wrap.querySelector('.pe-stage-complete');
+                    var committedCb = wrap.querySelector('.pe-stage-committed');
+
+                    if (completeCb && completeCb.dataset.wired !== 'true') {
+                        completeCb.dataset.wired = 'true';
+                        completeCb.addEventListener('change', function () {
+                            if (!completeCb.checked) return;
+                            if (committedCb) committedCb.checked = false;
+                        });
+                    }
+
+                    if (committedCb && committedCb.dataset.wired !== 'true') {
+                        committedCb.dataset.wired = 'true';
+                        committedCb.addEventListener('change', function () {
+                            if (!committedCb.checked) return;
+                            if (completeCb) completeCb.checked = false;
+                        });
+                    }
                 });
                 plSyncStageInputs(container);
             }
@@ -594,13 +654,13 @@
 
         function createPipelineSlide() {
             var pl = plLoad() || { title: DEFAULT_PIPELINE_TITLE, queryUrl: '', rows: [] };
-            var safeTitle = escapeHtml(pl.title || DEFAULT_PIPELINE_TITLE);
+            var pipelineTitleHtml = titleHtmlWithTeam('Pipeline');
             var div = document.createElement('div');
             div.className = 'slide slide-pipeline';
             div.innerHTML =
                 '<div class="pipeline-header">' +
                 '<div class="pipeline-title-row">' +
-                '<h2 class="pl-title" contenteditable="true">' + safeTitle + '</h2>' +
+                '<h2 class="pl-title" contenteditable="false">' + pipelineTitleHtml + '</h2>' +
                 '<input type="text" class="pl-query" hidden placeholder="Paste ADO query to pre-populate the Titles" value="' + ((pl.queryUrl || '').replace(/"/g, '&quot;')) + '">' +
                 '<button type="button" class="pl-query-run" hidden>Run</button>' +
                 '</div>' +
@@ -621,7 +681,7 @@
             var topSlide = document.createElement('div');
             topSlide.className = 'slide active';
             topSlide.innerHTML =
-                '<h2>&lt;/&gt; Top of Mind</h2>' +
+                '<h2>' + titleHtmlWithTeam('Top of Mind') + '</h2>' +
                 '<div id="tom" class="editable doc-edit" contenteditable="true" ' +
                 'placeholder="Click here to type your top-of-mind items…">' +
                 savedTom + '</div>';
@@ -674,7 +734,7 @@
                 }
 
                 div.innerHTML =
-                    '<h2>' + slide.title + '</h2>' +
+                    '<h2>' + escapeHtml(slide.title) + '</h2>' +
                     '<div class="table-wrap"><table>' +
                     '<thead><tr>' + headers + '</tr></thead>' +
                     '<tbody>' + rows + '</tbody>' +
@@ -1277,6 +1337,8 @@
                 linkBase    = slideData.linkBase || 'https://microsoft.visualstudio.com/Edge/_workitems/edit/';
                 hasMidpoint = !!slideData.hasMidpoint;
                 lastSlides  = slideData.slides;
+                baseSlideTitle = slideData.baseSlideTitle || 'Layout';
+                baseTeamName = slideData.baseTeamName || '';
 
                 renderSlides(slideData.slides);
                 renderRetro(retroData.rows, retroData.linkBase || linkBase);
@@ -1297,7 +1359,40 @@
             getLastSlides: function () { return lastSlides || []; },
             getPipelineStages: function () { return PL_STAGES; },
             loadPipeline: function () { return plLoad(); },
-            getFlatView: function () { return flatView; }
+            getFlatView: function () { return flatView; },
+            getBaseSlideTitle: function () { return baseSlideTitle; },
+            getBaseTeamName: function () { return baseTeamName; }
+        };
+
+        // Optional PPTX branding overrides consumed by pptx-export.js.
+        // Replace these values with your template font/color choices.
+        window.__arPptxTheme = {
+            // Example: 'pptx_inspect/background.png'
+            backgroundImageUrl: 'pptx_inspect/slideTemplate.png',
+            titleFont: 'Aptos Display',
+            titleFontSize: 28,
+            titleX: 2.0,
+            titleY: 0.18,
+            titleW: 10.6,
+            titleH: 0.62,
+            bodyFont: 'Aptos',
+            emojiFont: 'Segoe UI Emoji',
+            bgColor: 'FFFFFF',
+            titleColor: '0E2841',
+            bodyColor: '000000',
+            mutedTextColor: '467886',
+            headerFillColor: '156082',
+            rowAltColor: 'F8FAFC',
+            borderColor: 'D1D5DB',
+            linkColor: '467886',
+            pipelineLineColor: '999999',
+            pipelineCompleteColor: '4EA72E',
+            pipelineCommittedFillColor: 'E9F7EF',
+            pipelineFutureColor: '9CA3AF',
+            topicPillFillColor: 'DDDDDD',
+            topicPillBorderColor: '666666',
+            topicPillRadius: 0.12,
+            topicPillTextColor: '0E2841'
         };
 
         /* Show Top-of-Mind + Pipeline immediately (no data needed) */

@@ -136,6 +136,7 @@ header button:disabled { opacity: 0.5; cursor: wait; }
     border-radius: 6px;
     padding: 2px;
     flex-shrink: 0;
+    align-self: flex-start;
 }
 
 .view-btn {
@@ -1172,7 +1173,7 @@ nav span {
 
 .pv-col-hdr {
     text-align: center;
-    font-size: 10px;
+    font-size: 12px;
     font-weight: 700;
     color: #555;
     text-transform: uppercase;

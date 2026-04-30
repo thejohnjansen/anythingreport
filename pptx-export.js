@@ -441,7 +441,7 @@
             var plReferenceRowH = Math.min(0.95, plReferenceAvail / plReferenceRows);
             var plTopicHeightTrim = 20 / 96;
             var plTopicBoxH = Math.max(0.3, plReferenceRowH * 1.05 - plTopicHeightTrim);
-            var plTopicTextH = Math.max(0.24, plReferenceRowH * 0.88 - plTopicHeightTrim);
+            var plTopicTextH = Math.max(0.42, plReferenceRowH * 0.88 - plTopicHeightTrim);
 
             for (var r = 0; r < pageRows.length; r++) {
                 var row = pageRows[r];
@@ -459,7 +459,7 @@
                     x: plChartX + 0.06, y: centerY - plTopicTextH * 0.5,
                     w: plTopicW - 0.30, h: plTopicTextH,
                     align: 'center', valign: 'mid', bold: true,
-                    fontSize: 10, color: theme.topicPillTextColor, fontFace: theme.bodyFont
+                    fontSize: 18, color: theme.topicPillTextColor, fontFace: theme.bodyFont
                 });
 
                 // Connector line
@@ -482,20 +482,20 @@
                     var isCommitted = !!parsedStage.committed;
 
                     if (isHere) {
-                        spl.addText('\u27A4', {
-                            x: cx - plNodeD * 0.5 - 0.23, y: centerY - 0.11,
-                            w: 0.24, h: 0.22,
-                            align: 'center', color: theme.pipelineCompleteColor, bold: true,
-                            fontSize: 14, fontFace: theme.bodyFont
+                        spl.addShape(pres.ShapeType.downArrow, {
+                            x: cx - plNodeD * 0.5 - 0.25, y: centerY - 0.27,
+                            w: 0.12, h: 0.24,
+                            line: { color: theme.pipelineCompleteColor, pt: 1.3 },
+                            fill: { color: theme.pipelineCompleteColor }
                         });
                     }
 
                     if (isWarn) {
                         spl.addText('\u26A0\uFE0F', {
-                            x: cx - plNodeD * 0.5 - 0.28, y: centerY - 0.14,
-                            w: 0.26, h: 0.26,
+                            x: cx - plNodeD * 0.5 - 0.61, y: centerY - 0.24,
+                            w: 0.32, h: 0.32,
                             align: 'center', valign: 'mid',
-                            fontSize: 19, fontFace: theme.emojiFont
+                            fontSize: 24, fontFace: theme.emojiFont
                         });
                     }
 
@@ -510,7 +510,7 @@
                                 x: cx - plNodeD * 0.5 + 0.02, y: centerY - plNodeD * 0.5 + 0.02,
                                 w: plNodeD - 0.04, h: plNodeD - 0.04,
                                 align: 'center', valign: 'mid', fit: 'shrink',
-                                fontSize: 9, bold: true,
+                                fontSize: 12, bold: true,
                                 color: '000000', fontFace: theme.bodyFont
                             });
                         }
@@ -530,7 +530,7 @@
                                 x: cx - plNodeD * 0.5 + 0.02, y: centerY - plNodeD * 0.5 + 0.02,
                                 w: plNodeD - 0.04, h: plNodeD - 0.04,
                                 align: 'center', valign: 'mid', fit: 'shrink',
-                                fontSize: 10, bold: true,
+                                fontSize: 12, bold: true,
                                 color: committed ? theme.topicPillTextColor : '666666', fontFace: theme.bodyFont
                             });
                         }

@@ -1147,6 +1147,28 @@
             if (lastRetroRows) renderRetro(lastRetroRows, lastRetroLinkBase);
         }
 
+        async function parseApiJson(res, name) {
+            var text = await res.text();
+            var data = null;
+
+            try {
+                data = text ? JSON.parse(text) : {};
+            } catch (e) {
+                var snippet = (text || '').replace(/\s+/g, ' ').trim().slice(0, 300);
+                throw new Error(name + ' returned non-JSON response' + (snippet ? ': ' + snippet : '.'));
+            }
+
+            if (!res.ok) {
+                throw new Error(name + ' failed (' + res.status + '): ' + (data.error || res.statusText || 'Unknown error'));
+            }
+
+            if (data && data.error) {
+                throw new Error(name + ' error: ' + data.error);
+            }
+
+            return data;
+        }
+
         /* ── Render RETRO view ───────────────────────────────────── */
         function renderRetro(rows, retroLinkBase) {
             lastRetroRows = rows;
@@ -1183,8 +1205,8 @@
             for (var i = 0; i < rows.length; i++) {
                 var row = rows[i];
                 var ov = saved[row.id] || {};
-                var rag = ov.rag || '';
-                var fa = ov.featureArea || '';
+                var rag = (ov.rag !== undefined) ? ov.rag : (row.rag || '');
+                var fa = (ov.featureArea !== undefined) ? ov.featureArea : (row.featureArea || '');
                 var mission = ov.mission || row.mission;
                 sortable.push({ row: row, ov: ov, rag: rag, fa: fa, mission: mission });
             }
@@ -1380,13 +1402,11 @@
                     })
                 ]);
 
-                var slideData = await slideRes.json();
-                var docData   = await docRes.json();
-                var retroData = await retroRes.json();
-
-                if (slideData.error) throw new Error(slideData.error);
-                if (docData.error)   throw new Error(docData.error);
-                if (retroData.error) throw new Error(retroData.error);
+                var [slideData, docData, retroData] = await Promise.all([
+                    parseApiJson(slideRes, 'Slides API'),
+                    parseApiJson(docRes, 'Doc API'),
+                    parseApiJson(retroRes, 'Retro API')
+                ]);
 
                 linkBase    = slideData.linkBase || 'https://microsoft.visualstudio.com/Edge/_workitems/edit/';
                 hasMidpoint = !!slideData.hasMidpoint;

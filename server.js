@@ -59,8 +59,25 @@ function parseQueryUrl(raw) {
 
 async function adoFetch(url, token) {
     const res = await fetch(url, { headers: { Authorization: `Bearer ${token}` } });
-    if (!res.ok) throw new Error(`ADO ${res.status}: ${res.statusText} — ${url}`);
-    return res.json();
+    const bodyText = await res.text();
+    const contentType = String(res.headers.get('content-type') || '').toLowerCase();
+
+    if (!res.ok) {
+        const snippet = bodyText.replace(/\s+/g, ' ').trim().slice(0, 300);
+        throw new Error(`ADO ${res.status}: ${res.statusText} — ${url}${snippet ? ` — ${snippet}` : ''}`);
+    }
+
+    if (!contentType.includes('application/json')) {
+        const snippet = bodyText.replace(/\s+/g, ' ').trim().slice(0, 300);
+        throw new Error(`ADO non-JSON response (${contentType || 'unknown content-type'}) — ${url}${snippet ? ` — ${snippet}` : ''}`);
+    }
+
+    try {
+        return JSON.parse(bodyText);
+    } catch {
+        const snippet = bodyText.replace(/\s+/g, ' ').trim().slice(0, 300);
+        throw new Error(`ADO invalid JSON response — ${url}${snippet ? ` — ${snippet}` : ''}`);
+    }
 }
 
 async function runQuery(baseUrl, project, queryId, token) {
@@ -104,6 +121,14 @@ function parseIterationLevel2Token(iterationPath) {
 function parseAreaLevel4(areaPath) {
     const parts = String(areaPath || '').split('\\').filter(Boolean);
     return parts[3] || '';
+}
+
+function riskAssessmentToRag(risk) {
+    const r = String(risk || '').toLowerCase();
+    if (r.includes('on track')) return 'green';
+    if (r.includes('at risk')) return 'yellow';
+    if (r.includes('off track')) return 'red';
+    return '';
 }
 
 function findFirstLeafEpic(queryResult, workItemMap) {
@@ -529,8 +554,22 @@ function buildRetroRows(queryResult, workItemMap) {
                 .map(id => workItemMap[id])
                 .filter(Boolean);
 
+            const l2Risk = wi?.fields?.['OSG.RiskAssessment'] || '';
+            let rag = riskAssessmentToRag(l2Risk);
+
+            // If the Level-2 item has no direct risk value, derive a default
+            // from the first child milestone that has one.
+            if (!rag) {
+                const firstChildRisk = l3Items
+                    .map(w => w.fields['OSG.RiskAssessment'] || '')
+                    .find(Boolean) || '';
+                rag = riskAssessmentToRag(firstChildRisk);
+            }
+
             rows.push({
                 id:      l2Id,
+                rag,
+                featureArea: parseAreaLevel4(wi?.fields?.['System.AreaPath'] || ''),
                 mission: wi?.fields?.['System.Title'] || `Work Item ${l2Id}`,
                 milestones: l3Items.map(w => ({
                     id:    w.id,

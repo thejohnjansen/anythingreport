@@ -135,10 +135,13 @@ function buildTitleContext(queryResult, workItemMap) {
     if (!leafEpic) {
         return {
             baseTeamName: '',
-            flatSlideTitle: 'Layout'
+            flatSlideTitle: 'Layout',
+            deckFileName: 'anything-report'
         };
     }
 
+    const iterationPathParts = String(leafEpic.fields['System.IterationPath'] || '').split('\\').filter(Boolean);
+    const iterationLevel2NoHyphen = (iterationPathParts[1] || '').replace(/-/g, '');
     const iterationToken = parseIterationLevel2Token(leafEpic.fields['System.IterationPath']);
     const areaLevel4 = parseAreaLevel4(leafEpic.fields['System.AreaPath']);
 
@@ -147,9 +150,15 @@ function buildTitleContext(queryResult, workItemMap) {
     else if (iterationToken) flatSlideTitle = `${iterationToken}`;
     else if (areaLevel4) flatSlideTitle = `${areaLevel4}`;
 
+    let deckFileName = 'anything-report';
+    if (iterationLevel2NoHyphen && areaLevel4) {
+        deckFileName = `${iterationLevel2NoHyphen} - ${areaLevel4} Check In`;
+    }
+
     return {
         baseTeamName: areaLevel4 || '',
-        flatSlideTitle
+        flatSlideTitle,
+        deckFileName
     };
 }
 
@@ -402,6 +411,7 @@ app.post('/api/slides', async (req, res) => {
         const titleContext = buildTitleContext(queryResult, workItemMap);
         const baseSlideTitle = titleContext.flatSlideTitle;
         const baseTeamName = titleContext.baseTeamName;
+        const deckFileName = titleContext.deckFileName;
 
         // 5. Build slides
         const slides = flatView
@@ -411,7 +421,7 @@ app.post('/api/slides', async (req, res) => {
         // 6. Provide a link prefix so the UI can link to work items
         const linkBase = `${baseUrl}/${project}/_workitems/edit/`;
 
-        res.json({ slides, linkBase, hasMidpoint: !!midpointDate, baseSlideTitle, baseTeamName });
+        res.json({ slides, linkBase, hasMidpoint: !!midpointDate, baseSlideTitle, baseTeamName, deckFileName });
     } catch (err) {
         console.error('❌', err);
         res.status(500).json({ error: err.message });

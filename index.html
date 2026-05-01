@@ -113,6 +113,7 @@
         let flatView = localStorage.getItem('ar_flatview') === 'true';
         let baseSlideTitle = 'Layout';
         let baseTeamName = '';
+        let deckFileName = 'anything-report';
 
         const $deck    = document.getElementById('deck');
         const $nav     = document.getElementById('slideNav');
@@ -1392,6 +1393,7 @@
                 lastSlides  = slideData.slides;
                 baseSlideTitle = slideData.baseSlideTitle || 'Layout';
                 baseTeamName = slideData.baseTeamName || '';
+                deckFileName = slideData.deckFileName || 'anything-report';
 
                 renderSlides(slideData.slides);
                 renderRetro(retroData.rows, retroData.linkBase || linkBase);
@@ -1414,7 +1416,8 @@
             loadPipeline: function () { return plLoad(); },
             getFlatView: function () { return flatView; },
             getBaseSlideTitle: function () { return baseSlideTitle; },
-            getBaseTeamName: function () { return baseTeamName; }
+            getBaseTeamName: function () { return baseTeamName; },
+            getDeckFileName: function () { return deckFileName; }
         };
 
         // Optional PPTX branding overrides consumed by pptx-export.js.

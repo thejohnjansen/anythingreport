@@ -306,8 +306,15 @@
             PL_STAGES: state.getPipelineStages() || [],
             plData: state.loadPipeline(),
             baseSlideTitle: state.getBaseSlideTitle ? state.getBaseSlideTitle() : 'Layout',
-            baseTeamName: state.getBaseTeamName ? state.getBaseTeamName() : ''
+            baseTeamName: state.getBaseTeamName ? state.getBaseTeamName() : '',
+            deckFileName: state.getDeckFileName ? state.getDeckFileName() : 'anything-report'
         };
+    }
+
+    function sanitizeFileName(name) {
+        var value = String(name || '').trim();
+        if (!value) return 'anything-report';
+        return value.replace(/[\\/:*?"<>|]/g, ' ').replace(/\s+/g, ' ').trim() || 'anything-report';
     }
 
     function normalizePipelineStageValue(value) {
@@ -351,6 +358,7 @@
         var plData = state.plData;
         var baseSlideTitle = state.baseSlideTitle || 'Layout';
         var baseTeamName = (state.baseTeamName || '').trim();
+        var deckFileName = sanitizeFileName(state.deckFileName);
         var topOfMindTitle = baseTeamName ? ('Top of Mind - ' + baseTeamName) : 'Top of Mind';
         var pipelineBaseTitle = baseTeamName ? ('Pipeline - ' + baseTeamName) : 'Pipeline';
 
@@ -703,7 +711,7 @@
             }
         }
 
-        pres.writeFile({ fileName: 'anything-report.pptx' });
+        pres.writeFile({ fileName: deckFileName + '.pptx' });
     }
 
     var btn = document.getElementById('pptxBtn');

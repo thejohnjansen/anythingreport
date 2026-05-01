@@ -88,16 +88,25 @@
             return last.text === '' && last.options && last.options.breakLine;
         }
 
-        function pushRun(text, fmt) {
+        function pushRun(text, fmt, paraOpts) {
             var clean = sanitizeForPpt(text);
             if (!clean) return;
+            var options = {
+                bold: !!fmt.bold,
+                italic: !!fmt.italic,
+                underline: !!fmt.underline
+            };
+            if (paraOpts) {
+                if (paraOpts.bullet) {
+                    options.bullet = paraOpts.bullet;
+                }
+                if (typeof paraOpts.indentLevel === 'number') {
+                    options.indentLevel = paraOpts.indentLevel;
+                }
+            }
             runs.push({
                 text: clean,
-                options: {
-                    bold: !!fmt.bold,
-                    italic: !!fmt.italic,
-                    underline: !!fmt.underline
-                }
+                options: options
             });
         }
 
@@ -108,12 +117,32 @@
             runs.push({ text: '', options: { breakLine: true } });
         }
 
-        function walk(node, fmt) {
+        function listDepth(liNode) {
+            var depth = 0;
+            var p = liNode && liNode.parentElement;
+            while (p) {
+                var pt = p.tagName ? p.tagName.toLowerCase() : '';
+                if (pt === 'ul' || pt === 'ol') depth++;
+                p = p.parentElement;
+            }
+            return depth;
+        }
+
+        function consumePendingParagraphOptions(state, textPart) {
+            if (!state || !state.pendingParaOptions) return null;
+            if (!/\S/.test(textPart || '')) return null;
+            var opts = state.pendingParaOptions;
+            state.pendingParaOptions = null;
+            return opts;
+        }
+
+        function walk(node, fmt, state) {
             if (node.nodeType === Node.TEXT_NODE) {
                 var txt = (node.nodeValue || '').replace(/\r\n?/g, '\n');
                 var parts = txt.split('\n');
                 for (var pi = 0; pi < parts.length; pi++) {
-                    pushRun(parts[pi], fmt);
+                    var paraOpts = consumePendingParagraphOptions(state, parts[pi]);
+                    pushRun(parts[pi], fmt, paraOpts);
                     if (pi < parts.length - 1) pushBreak();
                 }
                 return;
@@ -146,26 +175,42 @@
                 var parentTag = node.parentElement && node.parentElement.tagName
                     ? node.parentElement.tagName.toLowerCase()
                     : '';
-                var marker = '\u2022 ';
-                if (parentTag === 'ol') {
-                    var idx = Array.prototype.indexOf.call(node.parentElement.children, node);
-                    marker = String(idx + 1) + '. ';
+                var level = Math.max(0, listDepth(node) - 1);
+                var liState = {
+                    pendingParaOptions: parentTag === 'ol'
+                        ? { bullet: { type: 'number' }, indentLevel: level }
+                        : { bullet: true, indentLevel: level }
+                };
+
+                if (runs.length && !endsWithBreak()) {
+                    pushBreak();
                 }
-                pushRun(marker, nextFmt);
+
+                for (var lii = 0; lii < node.childNodes.length; lii++) {
+                    walk(node.childNodes[lii], nextFmt, liState);
+                }
+
+                // Ensure an empty list item still emits a paragraph at the right list level.
+                if (liState.pendingParaOptions) {
+                    pushRun(' ', nextFmt, liState.pendingParaOptions);
+                }
+
+                pushBreak();
+                return;
             }
 
             for (var i = 0; i < node.childNodes.length; i++) {
-                walk(node.childNodes[i], nextFmt);
+                walk(node.childNodes[i], nextFmt, state);
             }
 
-            if (tag === 'div' || tag === 'p' || tag === 'li') {
+            if (tag === 'div' || tag === 'p') {
                 pushBreak();
             }
         }
 
         var baseFmt = { bold: false, italic: false, underline: false };
         for (var i = 0; i < root.childNodes.length; i++) {
-            walk(root.childNodes[i], baseFmt);
+            walk(root.childNodes[i], baseFmt, { pendingParaOptions: null });
         }
 
         // Avoid an extra blank line at the very end introduced by block tags.
@@ -329,7 +374,7 @@
                 y: TABLE_TOP_Y,
                 w: PPT_W,
                 h: 6.1,
-                fontSize: 14,
+                fontSize: 20,
                 color: theme.bodyColor,
                 fontFace: theme.bodyFont,
                 valign: 'top',

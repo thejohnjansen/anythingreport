@@ -558,12 +558,12 @@ function buildRetroRows(queryResult, workItemMap) {
             let rag = riskAssessmentToRag(l2Risk);
 
             // If the Level-2 item has no direct risk value, derive a default
-            // from the first child milestone that has one.
+            // from the worst child milestone risk (red > yellow > green).
             if (!rag) {
-                const firstChildRisk = l3Items
-                    .map(w => w.fields['OSG.RiskAssessment'] || '')
-                    .find(Boolean) || '';
-                rag = riskAssessmentToRag(firstChildRisk);
+                const childRags = l3Items.map(w => riskAssessmentToRag(w.fields['OSG.RiskAssessment'] || ''));
+                if (childRags.includes('red')) rag = 'red';
+                else if (childRags.includes('yellow')) rag = 'yellow';
+                else if (childRags.includes('green')) rag = 'green';
             }
 
             rows.push({
@@ -578,7 +578,7 @@ function buildRetroRows(queryResult, workItemMap) {
                 })),
                 justifications: l3Items.map(w => {
                     var c = w.fields['OSG.RiskAssessmentComment'] || '';
-                    return c.length > 100 ? c.slice(0, 100) + '…' : c;
+                    return c.length > 200 ? c.slice(0, 200) + '…' : c;
                 })
             });
         }

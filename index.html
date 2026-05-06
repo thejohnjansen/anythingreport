@@ -989,6 +989,7 @@
             /* Switch to edit mode */
             retroEditing = true;
             $retroContent.querySelectorAll('.retro-rag-sel').forEach(function(s) { s.hidden = false; });
+            $retroContent.querySelectorAll('.retro-rag-display').forEach(function(s) { s.hidden = true; });
             $retroContent.querySelectorAll('.retro-fa-input').forEach(function(s) { s.hidden = false; });
             $retroContent.querySelectorAll('.retro-fa-display').forEach(function(s) { s.hidden = true; });
             $retroContent.querySelectorAll('.retro-mission').forEach(function(s) { s.contentEditable = 'true'; s.classList.add('retro-editable'); });
@@ -1251,7 +1252,7 @@
                 h += '<option value="yellow"' + (rag === 'yellow' ? ' selected' : '') + '>&#9650; Yellow</option>';
                 h += '<option value="red"' + (rag === 'red' ? ' selected' : '') + '>&#11042; Red</option>';
                 h += '</select>';
-                h += retroRagIcon(rag);
+                h += '<span class="retro-rag-display">' + retroRagIcon(rag) + '</span>';
                 h += '</td>';
 
                 /* Feature area — read-only span + hidden input */

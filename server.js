@@ -123,6 +123,11 @@ function parseAreaLevel4(areaPath) {
     return parts[3] || '';
 }
 
+function parseAreaLevel3(areaPath) {
+    const parts = String(areaPath || '').split('\\').filter(Boolean);
+    return parts[2] || '';
+}
+
 function riskAssessmentToRag(risk) {
     const r = String(risk || '').toLowerCase();
     if (r.includes('on track')) return 'green';
@@ -155,12 +160,38 @@ function findFirstLeafEpic(queryResult, workItemMap) {
     return null;
 }
 
+function findLeafEpics(queryResult, workItemMap) {
+    const children = {};
+    const orderedTargets = [];
+    const seenTargets = new Set();
+
+    for (const rel of queryResult.workItemRelations || []) {
+        if (rel.source) (children[rel.source.id] ||= []).push(rel.target.id);
+        if (rel.target && !seenTargets.has(rel.target.id)) {
+            orderedTargets.push(rel.target.id);
+            seenTargets.add(rel.target.id);
+        }
+    }
+
+    const leafEpics = [];
+    for (const id of orderedTargets) {
+        const wi = workItemMap[id];
+        const wiType = String(wi?.fields?.['System.WorkItemType'] || '').toLowerCase();
+        if (!wi || !wiType.includes('epic')) continue;
+        if ((children[id] || []).length > 0) continue;
+        leafEpics.push(wi);
+    }
+
+    return leafEpics;
+}
+
 function buildTitleContext(queryResult, workItemMap) {
     const leafEpic = findFirstLeafEpic(queryResult, workItemMap);
     if (!leafEpic) {
         return {
             baseTeamName: '',
             flatSlideTitle: 'Layout',
+            flatSlidePrefix: '',
             deckFileName: 'anything-report'
         };
     }
@@ -169,6 +200,14 @@ function buildTitleContext(queryResult, workItemMap) {
     const iterationLevel2NoHyphen = (iterationPathParts[1] || '').replace(/-/g, '');
     const iterationToken = parseIterationLevel2Token(leafEpic.fields['System.IterationPath']);
     const areaLevel4 = parseAreaLevel4(leafEpic.fields['System.AreaPath']);
+    const areaLevel3 = parseAreaLevel3(leafEpic.fields['System.AreaPath']);
+
+    const leafEpics = findLeafEpics(queryResult, workItemMap);
+    const uniqueTeams = new Set(
+        leafEpics
+            .map(wi => parseAreaLevel4(wi.fields?.['System.AreaPath']))
+            .filter(Boolean)
+    );
 
     let flatSlideTitle = 'Layout';
     if (iterationToken && areaLevel4) flatSlideTitle = `${iterationToken} - ${areaLevel4}`;
@@ -176,13 +215,20 @@ function buildTitleContext(queryResult, workItemMap) {
     else if (areaLevel4) flatSlideTitle = `${areaLevel4}`;
 
     let deckFileName = 'anything-report';
-    if (iterationLevel2NoHyphen && areaLevel4) {
+    if (uniqueTeams.size > 1 && iterationLevel2NoHyphen && areaLevel3) {
+        deckFileName = `${iterationLevel2NoHyphen} ${areaLevel3}`;
+    } else if (iterationLevel2NoHyphen && areaLevel4) {
         deckFileName = `${iterationLevel2NoHyphen} - ${areaLevel4} Check In`;
     }
 
+    const topOfMindTeamName = (uniqueTeams.size > 1 && areaLevel3)
+        ? areaLevel3
+        : (areaLevel4 || '');
+
     return {
-        baseTeamName: areaLevel4 || '',
+        baseTeamName: topOfMindTeamName,
         flatSlideTitle,
+        flatSlidePrefix: iterationToken || '',
         deckFileName
     };
 }
@@ -360,7 +406,7 @@ function buildSlides(queryResult, workItemMap, midpointMap) {
 
 /* ── Flat view: one "Layout" slide with all leaf epics ───────────── */
 
-function buildFlatSlides(queryResult, workItemMap, midpointMap, flatSlideTitle) {
+function buildFlatSlides(queryResult, workItemMap, midpointMap, flatSlideTitle, flatSlidePrefix) {
     const children = {};
     const targetIds = new Set();
 
@@ -369,7 +415,17 @@ function buildFlatSlides(queryResult, workItemMap, midpointMap, flatSlideTitle) 
         if (rel.source) (children[rel.source.id] ||= []).push(rel.target.id);
     }
 
-    const items = [];
+    const itemsByArea = {};
+    const orderedAreas = [];
+
+    function pushItem(areaName, item) {
+        if (!itemsByArea[areaName]) {
+            itemsByArea[areaName] = [];
+            orderedAreas.push(areaName);
+        }
+        itemsByArea[areaName].push(item);
+    }
+
     for (const id of targetIds) {
         const wi = workItemMap[id];
         if (!wi) continue;
@@ -390,11 +446,24 @@ function buildFlatSlides(queryResult, workItemMap, midpointMap, flatSlideTitle) 
             item.midpointRisk    = snap.risk || '';
             item.midpointComment = snap.riskComment || '';
         }
-        items.push(item);
+
+        const areaName = parseAreaLevel4(wi.fields?.['System.AreaPath']) || 'Uncategorized';
+        pushItem(areaName, item);
     }
 
-    if (items.length === 0) return [];
-    return [{ title: flatSlideTitle || 'Layout', id: 'flat-layout', items }];
+    const areaNames = orderedAreas.length
+        ? orderedAreas
+        : [flatSlideTitle || 'Layout'];
+
+    const titlePrefix = String(flatSlidePrefix || '').trim();
+
+    const slides = areaNames.map((areaName, index) => ({
+        title: titlePrefix ? `${titlePrefix} - ${areaName}` : areaName,
+        id: `flat-${String(areaName).toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/(^-|-$)/g, '') || index}`,
+        items: itemsByArea[areaName] || []
+    }));
+
+    return slides.filter(s => s.items.length > 0);
 }
 
 /* ── API route ────────────────────────────────────────────────── */
@@ -435,12 +504,13 @@ app.post('/api/slides', async (req, res) => {
 
         const titleContext = buildTitleContext(queryResult, workItemMap);
         const baseSlideTitle = titleContext.flatSlideTitle;
+        const flatSlidePrefix = titleContext.flatSlidePrefix;
         const baseTeamName = titleContext.baseTeamName;
         const deckFileName = titleContext.deckFileName;
 
         // 5. Build slides
         const slides = flatView
-            ? buildFlatSlides(queryResult, workItemMap, midpointMap, baseSlideTitle)
+            ? buildFlatSlides(queryResult, workItemMap, midpointMap, baseSlideTitle, flatSlidePrefix)
             : buildSlides(queryResult, workItemMap, midpointMap);
 
         // 6. Provide a link prefix so the UI can link to work items

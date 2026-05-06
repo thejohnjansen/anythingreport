@@ -305,6 +305,7 @@
             lastSlides: state.getLastSlides() || [],
             PL_STAGES: state.getPipelineStages() || [],
             plData: state.loadPipeline(),
+            teamPipelines: state.loadTeamPipelines ? state.loadTeamPipelines() : {},
             baseSlideTitle: state.getBaseSlideTitle ? state.getBaseSlideTitle() : 'Layout',
             baseTeamName: state.getBaseTeamName ? state.getBaseTeamName() : '',
             deckFileName: state.getDeckFileName ? state.getDeckFileName() : 'anything-report'
@@ -356,6 +357,7 @@
         var lastSlides = state.lastSlides;
         var PL_STAGES = state.PL_STAGES;
         var plData = state.plData;
+        var teamPipelines = state.teamPipelines || {};
         var baseSlideTitle = state.baseSlideTitle || 'Layout';
         var baseTeamName = (state.baseTeamName || '').trim();
         var deckFileName = sanitizeFileName(state.deckFileName);
@@ -367,6 +369,7 @@
         var PPT_X = 0.2;
         var PPT_W = 13;
         var TABLE_TOP_Y = 1.5;
+        var FEATURE_TABLE_TOP_Y = TABLE_TOP_Y - 0.5;
         var TABLE_ROW_H = 0.5;
         var WORKITEM_LINK_BASE = 'https://microsoft.visualstudio.com/Edge/_workitems/edit/';
 
@@ -400,6 +403,320 @@
         var plTopicW  = 3.40;
         var plStageW  = plChartW - plTopicW; // shortened to give topic more room
         var plStageColW = plStageW / 6;
+        var hasFlatTeamSlides = !!(lastSlides && lastSlides.length && lastSlides.some(function (sd) {
+            return String((sd && sd.id) || '').indexOf('flat-') === 0;
+        }));
+
+        function extractTeamNameFromSlideTitle(title) {
+            var t = String(title || '').trim();
+            var sep = t.indexOf(' - ');
+            if (sep >= 0) return t.slice(sep + 3).trim() || t;
+            return t;
+        }
+
+        function addPipelinePlaceholderSlide(teamName) {
+            var slide = pres.addSlide();
+            pptxSlideHeader(slide, 'Pipeline - ' + teamName, theme, bgImageData);
+
+            var plHeaders = ['INVESTIGATE', 'EXPLAINER /\nDESIGN DOC', 'IMPLEMENTATION', 'DEV TRIAL', 'ORIGIN TRIAL /\nCFR', 'SHIP'];
+
+            // Legend (top-right, two stacked columns), mirrored from populated pipeline slides.
+            var legX = plChartX + plChartW - 4.9;
+            var legY = 0.25;
+            var legColGap = 2.45;
+            var legRowH = 0.22;
+            var legSymW = 0.24;
+            var legTxtW = 2.25;
+
+            function addPlLegendItem(slideRef, col, lrow, symbol, text, opts) {
+                var lx = legX + col * legColGap;
+                var ly = legY + lrow * legRowH;
+                if (opts.symbolType === 'dotFilled' || opts.symbolType === 'dotOpen') {
+                    var d = opts.symbolDiameter || 0.18;
+                    slideRef.addShape(pres.ShapeType.ellipse, {
+                        x: lx + (legSymW - d) / 2, y: ly + 0.03, w: d, h: d,
+                        line: { color: opts.symbolColor, pt: opts.symbolType === 'dotOpen' ? 2 : 1.2 },
+                        fill: { color: opts.symbolType === 'dotFilled' ? opts.symbolColor : 'FFFFFF' }
+                    });
+                } else if (opts.symbolType === 'dotFilledBorder') {
+                    var db = opts.symbolDiameter || 0.18;
+                    slideRef.addShape(pres.ShapeType.ellipse, {
+                        x: lx + (legSymW - db) / 2, y: ly + 0.03, w: db, h: db,
+                        line: { color: opts.symbolColor, pt: 2 },
+                        fill: { color: opts.fillColor || 'FFFFFF' }
+                    });
+                } else {
+                    slideRef.addText(symbol, {
+                        x: lx, y: ly, w: legSymW, h: 0.2,
+                        align: 'center', valign: 'mid',
+                        fontSize: opts.symbolSize, bold: !!opts.symbolBold,
+                        color: opts.symbolColor, fontFace: opts.symbolFont || 'Segoe UI'
+                    });
+                }
+                slideRef.addText(text, {
+                    x: lx + legSymW + 0.04, y: ly, w: legTxtW, h: 0.2,
+                    fontSize: 9, color: theme.mutedTextColor, fontFace: theme.bodyFont
+                });
+            }
+
+            addPlLegendItem(slide, 0, 0, '\u25BC', 'Roughly where we are',        { symbolSize: 11, symbolBold: true, symbolColor: theme.pipelineCompleteColor });
+            addPlLegendItem(slide, 0, 1, '\u26A0\uFE0F', 'Risk Identified',         { symbolSize: 12, symbolColor: 'D97706', symbolFont: theme.emojiFont });
+            addPlLegendItem(slide, 1, 0, '', 'Completed',                           { symbolType: 'dotFilled', symbolColor: theme.pipelineCompleteColor, symbolDiameter: 0.18 });
+            addPlLegendItem(slide, 1, 1, '', 'Committed for the current cycle',     { symbolType: 'dotFilledBorder', symbolColor: theme.pipelineCompleteColor, fillColor: theme.pipelineCommittedFillColor, symbolDiameter: 0.18 });
+            addPlLegendItem(slide, 1, 2, '', 'Planned for a future cycle',          { symbolType: 'dotOpen',   symbolColor: theme.pipelineFutureColor, symbolDiameter: 0.18 });
+
+            var plLegendBottomY = legY + legRowH * 3 + 0.02;
+            var headerY = plLegendBottomY + 0.14;
+
+            for (var ph = 0; ph < 6; ph++) {
+                slide.addText(plHeaders[ph], {
+                    x: plChartX + plTopicW + ph * plStageColW,
+                    y: headerY,
+                    w: plStageColW,
+                    h: 0.36,
+                    align: 'center',
+                    valign: 'mid',
+                    bold: true,
+                    fontSize: 9,
+                    color: '666666',
+                    fontFace: theme.bodyFont
+                });
+            }
+
+            var rowCount = 4;
+            var rowStartY = headerY + 0.58;
+            var rowGap = 0.15;
+            var plFixedRows = 6;
+            var plAvail = plChartBottomY - rowStartY - (plFixedRows - 1) * rowGap;
+            var rowH = Math.min(0.95, plAvail / plFixedRows);
+            var nodeD = Math.min(0.65, rowH * 1.05);
+            var plReferenceRows = 5;
+            var plReferenceAvail = plChartBottomY - rowStartY - (plReferenceRows - 1) * rowGap;
+            var plReferenceRowH = Math.min(0.95, plReferenceAvail / plReferenceRows);
+            var plTopicHeightTrim = 20 / 96;
+            var plTopicBoxH = Math.max(0.3, plReferenceRowH * 1.05 - plTopicHeightTrim);
+
+            for (var r = 0; r < rowCount; r++) {
+                var rowY = rowStartY + r * (rowH + rowGap);
+                var centerY = rowY + rowH * 0.5;
+
+                slide.addShape(pres.ShapeType.roundRect, {
+                    x: plChartX,
+                    y: centerY - plTopicBoxH * 0.5,
+                    w: plTopicW - 0.18,
+                    h: plTopicBoxH,
+                    rectRadius: theme.topicPillRadius,
+                    line: { color: 'CFCFCF', pt: 1.2 },
+                    fill: { color: 'E5E7EB' }
+                });
+
+                slide.addShape(pres.ShapeType.line, {
+                    x: plChartX + plTopicW - 0.18,
+                    y: centerY,
+                    w: (plChartX + plTopicW + plStageColW * 5.5 + nodeD * 0.5) - (plChartX + plTopicW - 0.18),
+                    h: 0,
+                    line: { color: theme.pipelineLineColor, pt: 4 }
+                });
+
+                for (var sc = 0; sc < 6; sc++) {
+                    var cx = plChartX + plTopicW + plStageColW * (sc + 0.5);
+                    slide.addShape(pres.ShapeType.ellipse, {
+                        x: cx - nodeD * 0.5,
+                        y: centerY - nodeD * 0.5,
+                        w: nodeD,
+                        h: nodeD,
+                        line: { color: theme.pipelineFutureColor, pt: 2.5 },
+                        fill: { color: 'FFFFFF' }
+                    });
+                }
+            }
+        }
+
+        function addPipelineDataSlides(teamName, pipelineData) {
+            var pipelineRows = (pipelineData && pipelineData.rows) ? pipelineData.rows.slice(0, 12) : [];
+            if (!pipelineRows.length) return false;
+
+            var pageGroups;
+            if (pipelineRows.length > 7) {
+                pageGroups = [pipelineRows.slice(0, 6), pipelineRows.slice(6)];
+            } else {
+                pageGroups = [pipelineRows];
+            }
+
+            var title = 'Pipeline - ' + teamName;
+            var totalPages = pageGroups.length;
+            var plHeaders = ['INVESTIGATE', 'EXPLAINER /\nDESIGN DOC', 'IMPLEMENTATION', 'DEV TRIAL', 'ORIGIN TRIAL /\nCFR', 'SHIP'];
+
+            for (var plPg = 0; plPg < totalPages; plPg++) {
+                var pageRows = pageGroups[plPg];
+                var spl = pres.addSlide();
+                var pageTitle = totalPages > 1 ? title + ' (' + (plPg + 1) + '/' + totalPages + ')' : title;
+                pptxSlideHeader(spl, pageTitle, theme, bgImageData);
+
+                // Legend (top-right, two stacked columns)
+                var legX = plChartX + plChartW - 4.9;
+                var legY = 0.25;
+                var legColGap = 2.45;
+                var legRowH = 0.22;
+                var legSymW = 0.24;
+                var legTxtW = 2.25;
+
+                function addPlLegendItem(slide, col, lrow, symbol, text, opts) {
+                    var lx = legX + col * legColGap;
+                    var ly = legY + lrow * legRowH;
+                    if (opts.symbolType === 'dotFilled' || opts.symbolType === 'dotOpen') {
+                        var d = opts.symbolDiameter || 0.18;
+                        slide.addShape(pres.ShapeType.ellipse, {
+                            x: lx + (legSymW - d) / 2, y: ly + 0.03, w: d, h: d,
+                            line: { color: opts.symbolColor, pt: opts.symbolType === 'dotOpen' ? 2 : 1.2 },
+                            fill: { color: opts.symbolType === 'dotFilled' ? opts.symbolColor : 'FFFFFF' }
+                        });
+                    } else if (opts.symbolType === 'dotFilledBorder') {
+                        var db = opts.symbolDiameter || 0.18;
+                        slide.addShape(pres.ShapeType.ellipse, {
+                            x: lx + (legSymW - db) / 2, y: ly + 0.03, w: db, h: db,
+                            line: { color: opts.symbolColor, pt: 2 },
+                            fill: { color: opts.fillColor || 'FFFFFF' }
+                        });
+                    } else {
+                        slide.addText(symbol, {
+                            x: lx, y: ly, w: legSymW, h: 0.2,
+                            align: 'center', valign: 'mid',
+                            fontSize: opts.symbolSize, bold: !!opts.symbolBold,
+                            color: opts.symbolColor, fontFace: opts.symbolFont || 'Segoe UI'
+                        });
+                    }
+                    slide.addText(text, {
+                        x: lx + legSymW + 0.04, y: ly, w: legTxtW, h: 0.2,
+                        fontSize: 9, color: theme.mutedTextColor, fontFace: theme.bodyFont
+                    });
+                }
+
+                addPlLegendItem(spl, 0, 0, '\u25BC', 'Roughly where we are',        { symbolSize: 11, symbolBold: true, symbolColor: theme.pipelineCompleteColor });
+                addPlLegendItem(spl, 0, 1, '\u26A0\uFE0F', 'Risk Identified',         { symbolSize: 12, symbolColor: 'D97706', symbolFont: theme.emojiFont });
+                addPlLegendItem(spl, 1, 0, '', 'Completed',                           { symbolType: 'dotFilled', symbolColor: theme.pipelineCompleteColor, symbolDiameter: 0.18 });
+                addPlLegendItem(spl, 1, 1, '', 'Committed for the current cycle',     { symbolType: 'dotFilledBorder', symbolColor: theme.pipelineCompleteColor, fillColor: theme.pipelineCommittedFillColor, symbolDiameter: 0.18 });
+                addPlLegendItem(spl, 1, 2, '', 'Planned for a future cycle',          { symbolType: 'dotOpen',   symbolColor: theme.pipelineFutureColor, symbolDiameter: 0.18 });
+
+                var plLegendBottomY = legY + legRowH * 3 + 0.02;
+                var plHeaderY = plLegendBottomY + 0.14;
+                for (var ph = 0; ph < 6; ph++) {
+                    spl.addText(plHeaders[ph], {
+                        x: plChartX + plTopicW + ph * plStageColW,
+                        y: plHeaderY, w: plStageColW, h: 0.36,
+                        align: 'center', valign: 'mid', bold: true,
+                        fontSize: 9, color: '666666', fontFace: theme.bodyFont
+                    });
+                }
+
+                var plRowStartY = plHeaderY + 0.58;
+                var plRowGap    = 0.15;
+                var plFixedRows = 6;
+                var plAvail     = plChartBottomY - plRowStartY - (plFixedRows - 1) * plRowGap;
+                var plRowH      = Math.min(0.95, plAvail / plFixedRows);
+                var plNodeD     = Math.min(0.65, plRowH * 1.05);
+                var plReferenceRows = 5;
+                var plReferenceAvail = plChartBottomY - plRowStartY - (plReferenceRows - 1) * plRowGap;
+                var plReferenceRowH = Math.min(0.95, plReferenceAvail / plReferenceRows);
+                var plTopicHeightTrim = 20 / 96;
+                var plTopicBoxH = Math.max(0.3, plReferenceRowH * 1.05 - plTopicHeightTrim);
+                var plTopicTextH = Math.max(0.42, plReferenceRowH * 0.88 - plTopicHeightTrim);
+
+                for (var r = 0; r < pageRows.length; r++) {
+                    var row = pageRows[r];
+                    var rowY    = plRowStartY + r * (plRowH + plRowGap);
+                    var centerY = rowY + plRowH * 0.5;
+
+                    spl.addShape(pres.ShapeType.roundRect, {
+                        x: plChartX, y: centerY - plTopicBoxH * 0.5,
+                        w: plTopicW - 0.18, h: plTopicBoxH,
+                        rectRadius: theme.topicPillRadius,
+                        line: { color: theme.topicPillBorderColor, pt: 1.2 }, fill: { color: theme.topicPillFillColor }
+                    });
+                    spl.addText(row.topic || '', {
+                        x: plChartX + 0.06, y: centerY - plTopicTextH * 0.5,
+                        w: plTopicW - 0.30, h: plTopicTextH,
+                        align: 'center', valign: 'mid', bold: true,
+                        fontSize: 18, color: theme.topicPillTextColor, fontFace: theme.bodyFont
+                    });
+
+                    spl.addShape(pres.ShapeType.line, {
+                        x: plChartX + plTopicW - 0.18,
+                        y: centerY,
+                        w: (plChartX + plTopicW + plStageColW * 5.5 + plNodeD * 0.5) - (plChartX + plTopicW - 0.18),
+                        h: 0,
+                        line: { color: theme.pipelineLineColor, pt: 5 }
+                    });
+
+                    for (var sc = 0; sc < 6; sc++) {
+                        var cx = plChartX + plTopicW + plStageColW * (sc + 0.5);
+                        var parsedStage = parsePipelineStageValue((row.stages && row.stages[sc]) || '');
+                        var v  = parsedStage.label;
+                        var isHere = row.hereCol === sc;
+                        var isWarn = row.warnCol === sc;
+                        var isDone = parsedStage.complete;
+                        var isCommitted = !!parsedStage.committed;
+
+                        if (isHere) {
+                            spl.addShape(pres.ShapeType.downArrow, {
+                                x: cx - plNodeD * 0.5 - 0.25, y: centerY - 0.27,
+                                w: 0.12, h: 0.24,
+                                line: { color: theme.pipelineCompleteColor, pt: 1.3 },
+                                fill: { color: theme.pipelineCompleteColor }
+                            });
+                        }
+
+                        if (isWarn) {
+                            spl.addText('\u26A0\uFE0F', {
+                                x: cx - plNodeD * 0.5 - 0.61, y: centerY - 0.24,
+                                w: 0.32, h: 0.32,
+                                align: 'center', valign: 'mid',
+                                fontSize: 24, fontFace: theme.emojiFont
+                            });
+                        }
+
+                        if (isDone) {
+                            spl.addShape(pres.ShapeType.ellipse, {
+                                x: cx - plNodeD * 0.5, y: centerY - plNodeD * 0.5,
+                                w: plNodeD, h: plNodeD,
+                                line: { color: theme.pipelineCompleteColor, pt: 1.5 }, fill: { color: theme.pipelineCompleteColor }
+                            });
+                            if (v) {
+                                spl.addText(v, {
+                                    x: cx - plNodeD * 0.5 + 0.02, y: centerY - plNodeD * 0.5 + 0.02,
+                                    w: plNodeD - 0.04, h: plNodeD - 0.04,
+                                    align: 'center', valign: 'mid', fit: 'shrink',
+                                    fontSize: 12, bold: true,
+                                    color: '000000', fontFace: theme.bodyFont
+                                });
+                            }
+                            continue;
+                        }
+
+                        if (v || isCommitted) {
+                            var committed = isCommitted;
+                            spl.addShape(pres.ShapeType.ellipse, {
+                                x: cx - plNodeD * 0.5, y: centerY - plNodeD * 0.5,
+                                w: plNodeD, h: plNodeD,
+                                line: { color: committed ? theme.pipelineCompleteColor : theme.pipelineFutureColor, pt: 2.5 },
+                                fill: { color: committed ? theme.pipelineCommittedFillColor : 'FFFFFF' }
+                            });
+                            if (v) {
+                                spl.addText(v, {
+                                    x: cx - plNodeD * 0.5 + 0.02, y: centerY - plNodeD * 0.5 + 0.02,
+                                    w: plNodeD - 0.04, h: plNodeD - 0.04,
+                                    align: 'center', valign: 'mid', fit: 'shrink',
+                                    fontSize: 12, bold: true,
+                                    color: committed ? theme.topicPillTextColor : '666666', fontFace: theme.bodyFont
+                                });
+                            }
+                        }
+                    }
+                }
+            }
+
+            return true;
+        }
 
         // Cap at 12 rows; split >7 as 6 + remainder
         var allPlRows = (plData && plData.rows) ? plData.rows.slice(0, 12) : [];
@@ -411,6 +728,7 @@
         }
         var plTotalPages = plPageGroups.length;
 
+        if (!hasFlatTeamSlides) {
         for (var plPg = 0; plPg < plTotalPages; plPg++) {
             var pageRows = plPageGroups[plPg];
             var spl = pres.addSlide();
@@ -591,6 +909,7 @@
                 }
             }
         }
+        }
 
         // Slides 3+: Feature group slides
         if (lastSlides && lastSlides.length > 0) {
@@ -602,7 +921,7 @@
                 if (sd.items.length === 0) {
                     fs.addText('No child items', {
                         x: PPT_X,
-                        y: TABLE_TOP_Y,
+                        y: FEATURE_TABLE_TOP_Y,
                         w: PPT_W,
                         h: 0.5,
                         fontSize: 12,
@@ -686,7 +1005,7 @@
 
                     pageSlide.addTable([tblHdr].concat(pageRows), {
                         x: PPT_X,
-                        y: TABLE_TOP_Y,
+                        y: FEATURE_TABLE_TOP_Y,
                         w: PPT_W,
                         border: tableNoBorder(),
                         rowH: TABLE_ROW_H,
@@ -697,7 +1016,7 @@
                     for (var r = 0; r < pageItems.length; r++) {
                         pageSlide.addShape(pres.ShapeType.rect, {
                             x: PPT_X,
-                            y: TABLE_TOP_Y + TABLE_ROW_H * (r + 1),
+                            y: FEATURE_TABLE_TOP_Y + TABLE_ROW_H * (r + 1),
                             w: colW[0],
                             h: TABLE_ROW_H,
                             line: { color: 'FFFFFF', transparency: 100, pt: 0 },
@@ -707,6 +1026,12 @@
                     }
 
                     start += size;
+                }
+
+                var teamName = extractTeamNameFromSlideTitle(sd.title);
+                var teamPipeline = teamPipelines[teamName] || null;
+                if (!addPipelineDataSlides(teamName, teamPipeline)) {
+                    addPipelinePlaceholderSlide(teamName);
                 }
             }
         }

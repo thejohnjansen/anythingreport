@@ -338,9 +338,41 @@
             return t;
         }
 
-        function plLoad() {
+        function extractTeamNameFromSlideTitle(title) {
+            var t = String(title || '').trim();
+            var sep = t.indexOf(' - ');
+            if (sep >= 0) return t.slice(sep + 3).trim() || t;
+            return t;
+        }
+
+        function teamPipelineStorageKey(teamName) {
+            var slug = String(teamName || '').toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/(^-|-$)/g, '');
+            return 'ar_pipeline_team_' + (slug || 'default');
+        }
+
+        function teamPipelineTitle(teamName) {
+            var t = String(teamName || '').trim();
+            return t ? ('Pipeline - ' + t) : DEFAULT_PIPELINE_TITLE;
+        }
+
+        function buildPipelinePlaceholders(rowCount) {
+            var rows = [];
+            for (var i = 0; i < rowCount; i++) {
+                rows.push({
+                    topic: '',
+                    stages: ['', '', '', '', '', ''],
+                    hereCol: -1,
+                    warnCol: -1,
+                    readonlyTopic: false
+                });
+            }
+            return rows;
+        }
+
+        function plLoad(storageKey) {
+            var key = storageKey || 'ar_pipeline';
             try {
-                var pl = JSON.parse(localStorage.getItem('ar_pipeline'));
+                var pl = JSON.parse(localStorage.getItem(key));
                 if (!pl || typeof pl !== 'object') return null;
                 pl.title = normalizePipelineTitle(pl.title);
                 return pl;
@@ -348,7 +380,10 @@
                 return null;
             }
         }
-        function plSave(d) { localStorage.setItem('ar_pipeline', JSON.stringify(d)); }
+        function plSave(d, storageKey) {
+            var key = storageKey || 'ar_pipeline';
+            localStorage.setItem(key, JSON.stringify(d));
+        }
 
         function normalizePipelineStageValue(value) {
             var v = (value || '').trim();
@@ -548,7 +583,7 @@
             });
         }
 
-        async function plPopulateFromQuery(editorEl, titleEl, queryEl) {
+        async function plPopulateFromQuery(editorEl, titleEl, queryEl, storageKey) {
             var queryUrl = queryEl ? queryEl.value.trim() : '';
             if (!queryUrl) throw new Error('Pipeline query URL is required');
 
@@ -569,31 +604,32 @@
             }
             var existingRows = plReadEditorRows(editorEl);
             var mergedRows = plMergeRowsByTopic(existingRows, fetchedRows);
-            var pl = plLoad() || { title: 'Pipeline', queryUrl: '', rows: [] };
+            var pl = plLoad(storageKey) || { title: 'Pipeline', queryUrl: '', rows: [] };
             pl.title = titleEl.textContent || DEFAULT_PIPELINE_TITLE;
             pl.queryUrl = queryUrl;
             pl.rows = mergedRows;
-            plSave(pl);
+            plSave(pl, storageKey);
             return pl;
         }
 
-        async function plApply(vizEl, editorEl, titleEl, queryEl) {
+        async function plApply(vizEl, editorEl, titleEl, queryEl, storageKey) {
             var pl = {
                 title: titleEl.textContent || DEFAULT_PIPELINE_TITLE,
                 queryUrl: queryEl ? queryEl.value.trim() : '',
                 rows: plReadEditorRows(editorEl)
             };
-            plSave(pl);
+            plSave(pl, storageKey);
             vizEl.innerHTML = plVizHTML(pl);
         }
 
-        function plWireup(slideEl) {
+        function plWireup(slideEl, storageKey, editSeedRows) {
             var $viz = slideEl.querySelector('.pl-viz');
             var $ed  = slideEl.querySelector('.pl-editor');
             var $btn = slideEl.querySelector('.pl-edit-btn');
             var $ttl = slideEl.querySelector('.pl-title');
             var $query = slideEl.querySelector('.pl-query');
             var $queryRun = slideEl.querySelector('.pl-query-run');
+            var seedRows = (typeof editSeedRows === 'number' && editSeedRows > 0) ? editSeedRows : 4;
 
             function wireStageControls(container) {
                 container.querySelectorAll('.pe-stage-wrap').forEach(function (wrap) {
@@ -638,7 +674,7 @@
                     runBtn.addEventListener('click', async function () {
                         try {
                             runBtn.disabled = true;
-                            var pl = await plPopulateFromQuery(container, $ttl, $query);
+                            var pl = await plPopulateFromQuery(container, $ttl, $query, storageKey);
                             rerenderEditor(pl);
                         } catch (err) {
                             alert('Error: ' + err.message);
@@ -649,7 +685,7 @@
                 }
                 container.querySelector('#peApply').addEventListener('click', async function() {
                     try {
-                        await plApply($viz, $ed, $ttl, $query);
+                        await plApply($viz, $ed, $ttl, $query, storageKey);
                         $ed.hidden = true; $viz.hidden = false;
                         if ($query) $query.hidden = true;
                         if ($queryRun) $queryRun.hidden = true;
@@ -667,7 +703,7 @@
             $btn.addEventListener('click', async function() {
                 if (!$ed.hidden) {
                     try {
-                        await plApply($viz, $ed, $ttl, $query);
+                        await plApply($viz, $ed, $ttl, $query, storageKey);
                         $ed.hidden = true; $viz.hidden = false;
                         if ($query) $query.hidden = true;
                         if ($queryRun) $queryRun.hidden = true;
@@ -676,7 +712,11 @@
                         alert('Error: ' + err.message);
                     }
                 } else {
-                    var pl = plLoad() || { title: DEFAULT_PIPELINE_TITLE, queryUrl: '', rows: [] };
+                    var pl = plLoad(storageKey) || { title: DEFAULT_PIPELINE_TITLE, queryUrl: '', rows: [] };
+                    if (!pl.rows || pl.rows.length === 0) {
+                        pl.rows = buildPipelinePlaceholders(seedRows);
+                        plSave(pl, storageKey);
+                    }
                     $ed.innerHTML = plEditorHTML(pl);
                     if ($query) {
                         $query.hidden = false;
@@ -690,25 +730,34 @@
             });
 
             $ttl.addEventListener('input', function() {
-                var pl = plLoad() || { title: DEFAULT_PIPELINE_TITLE, queryUrl: '', rows: [] };
+                var pl = plLoad(storageKey) || { title: DEFAULT_PIPELINE_TITLE, queryUrl: '', rows: [] };
                 pl.title = $ttl.textContent || DEFAULT_PIPELINE_TITLE;
-                plSave(pl);
+                plSave(pl, storageKey);
             });
 
             if ($query) {
                 $query.addEventListener('input', function () {
-                    var pl = plLoad() || { title: DEFAULT_PIPELINE_TITLE, queryUrl: '', rows: [] };
+                    var pl = plLoad(storageKey) || { title: DEFAULT_PIPELINE_TITLE, queryUrl: '', rows: [] };
                     pl.queryUrl = $query.value;
-                    plSave(pl);
+                    plSave(pl, storageKey);
                 });
             }
 
             wireEditorButtons($ed);
         }
 
-        function createPipelineSlide() {
-            var pl = plLoad() || { title: DEFAULT_PIPELINE_TITLE, queryUrl: '', rows: [] };
-            var pipelineTitleHtml = titleHtmlWithTeam('Pipeline');
+        function createPipelineSlide(opts) {
+            var options = opts || {};
+            var storageKey = options.storageKey || 'ar_pipeline';
+            var teamName = options.teamName || '';
+            var useTeamTitle = !!teamName;
+            var placeholderRows = options.placeholderRows || 0;
+            var defaultTitle = useTeamTitle ? teamPipelineTitle(teamName) : DEFAULT_PIPELINE_TITLE;
+            var pl = plLoad(storageKey) || { title: defaultTitle, queryUrl: '', rows: placeholderRows ? buildPipelinePlaceholders(placeholderRows) : [] };
+            if (!pl.title) pl.title = defaultTitle;
+            var pipelineTitleHtml = useTeamTitle
+                ? escapeHtml(teamPipelineTitle(teamName))
+                : titleHtmlWithTeam('Pipeline');
             var div = document.createElement('div');
             div.className = 'slide slide-pipeline';
             div.innerHTML =
@@ -722,11 +771,13 @@
                 '<div class="pl-viz">' + plVizHTML(pl) + '</div>' +
                 '<div class="pl-editor" hidden>' + plEditorHTML(pl) + '</div>';
             $deck.appendChild(div);
-            plWireup(div);
+            plWireup(div, storageKey, 4);
         }
 
         /* ── Render SLIDES view ─────────────────────────────────── */
-        function renderSlides(slides) {
+        function renderSlides(slides, options) {
+            var opts = options || {};
+            var showPipelineWhenEmpty = opts.showPipelineWhenEmpty !== false;
             var tom = $deck.querySelector('#tom');
             var savedTom = tom ? tom.innerHTML : (localStorage.getItem('ar_tom') || '');
 
@@ -745,8 +796,16 @@
                 localStorage.setItem('ar_tom', this.innerHTML);
             });
 
-            /* Slide 2: Pipeline */
-            createPipelineSlide();
+            var hasFlatTeamSlides = slides.some(function (slide) {
+                return String(slide.id || '').indexOf('flat-') === 0;
+            });
+
+            var shouldShowMainPipeline = !hasFlatTeamSlides && (slides.length > 0 || showPipelineWhenEmpty);
+
+            if (shouldShowMainPipeline) {
+                /* Slide 2: Pipeline */
+                createPipelineSlide();
+            }
 
             var colCount = hasMidpoint ? 6 : 4;
 
@@ -795,9 +854,22 @@
                     '</table></div>';
 
                 $deck.appendChild(div);
+
+                if (hasFlatTeamSlides) {
+                    var teamName = extractTeamNameFromSlideTitle(slide.title);
+                    createPipelineSlide({
+                        storageKey: teamPipelineStorageKey(teamName),
+                        teamName: teamName,
+                        placeholderRows: 4
+                    });
+                }
             }
 
-            total = 2 + slides.length;
+            if (hasFlatTeamSlides) {
+                total = 1 + slides.length * 2;
+            } else {
+                total = (shouldShowMainPipeline ? 2 : 1) + slides.length;
+            }
             $empty.hidden = true;
             if (activeView === 'slides') $nav.hidden = false;
             show(0);
@@ -1434,7 +1506,21 @@
             getHasMidpoint: function () { return hasMidpoint; },
             getLastSlides: function () { return lastSlides || []; },
             getPipelineStages: function () { return PL_STAGES; },
-            loadPipeline: function () { return plLoad(); },
+            loadPipeline: function () { return plLoad('ar_pipeline'); },
+            loadTeamPipelines: function () {
+                var map = {};
+                var slides = lastSlides || [];
+                slides.forEach(function (slide) {
+                    if (String(slide.id || '').indexOf('flat-') !== 0) return;
+                    var team = extractTeamNameFromSlideTitle(slide.title);
+                    map[team] = plLoad(teamPipelineStorageKey(team)) || {
+                        title: teamPipelineTitle(team),
+                        queryUrl: '',
+                        rows: []
+                    };
+                });
+                return map;
+            },
             getFlatView: function () { return flatView; },
             getBaseSlideTitle: function () { return baseSlideTitle; },
             getBaseTeamName: function () { return baseTeamName; },
@@ -1472,8 +1558,8 @@
             topicPillTextColor: '0E2841'
         };
 
-        /* Show Top-of-Mind + Pipeline immediately (no data needed) */
-        renderSlides([]);
+        /* Show only Top-of-Mind immediately (before first Run). */
+        renderSlides([], { showPipelineWhenEmpty: false });
     </script>
 
     <script src="https://cdn.jsdelivr.net/npm/pptxgenjs@3/dist/pptxgen.bundle.js"></script>

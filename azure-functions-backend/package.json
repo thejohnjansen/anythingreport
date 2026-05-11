@@ -1,0 +1,22 @@
+{
+  "name": "anything-report-functions",
+  "version": "0.1.0",
+  "private": true,
+  "description": "Azure Functions backend for planned work-item storytelling",
+  "main": "dist/index.js",
+  "scripts": {
+    "build": "tsc -p tsconfig.json",
+    "watch": "tsc -p tsconfig.json --watch",
+    "start": "func start",
+    "start:dev": "npm run build && func start"
+  },
+  "dependencies": {
+    "@azure/cosmos": "^4.2.0",
+    "@azure/functions": "^4.6.0",
+    "pptxgenjs": "^4.0.1"
+  },
+  "devDependencies": {
+    "@types/node": "^22.15.3",
+    "typescript": "^5.8.3"
+  }
+}

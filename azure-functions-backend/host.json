@@ -7,5 +7,13 @@
         "excludedTypes": "Request"
       }
     }
+  },
+  "healthMonitor": {
+    "enabled": true,
+    "healthCheckInterval": "00:00:10",
+    "healthCheckWindow": "00:02:00",
+    "healthyThreshold": 6,
+    "unhealthyThreshold": 3,
+    "disabledHealthChecks": ["AzureWebJobsStorage"]
   }
 }

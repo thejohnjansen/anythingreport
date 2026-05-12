@@ -1,22 +1,17 @@
 "use strict";
 Object.defineProperty(exports, "__esModule", { value: true });
 exports.fetchWorkItems = fetchWorkItems;
+const adoClient_1 = require("./adoClient");
 function getAdoConfigFromEnv() {
     const organizationUrl = process.env.ADO_ORGANIZATION_URL;
     const project = process.env.ADO_PROJECT;
-    const pat = process.env.ADO_PAT;
-    if (!organizationUrl || !project || !pat) {
-        throw new Error('Missing ADO configuration. Set ADO_ORGANIZATION_URL, ADO_PROJECT, and ADO_PAT.');
+    if (!organizationUrl || !project) {
+        throw new Error('Missing ADO configuration. Set ADO_ORGANIZATION_URL and ADO_PROJECT.');
     }
     return {
         organizationUrl: organizationUrl.replace(/\/+$/, ''),
-        project,
-        pat
+        project
     };
-}
-function getAuthHeaderValue(pat) {
-    // Azure DevOps PAT auth uses basic auth with empty username and PAT as password.
-    return `Basic ${Buffer.from(`:${pat}`).toString('base64')}`;
 }
 function escapeWiqlString(value) {
     return value.replace(/'/g, "''");
@@ -31,21 +26,12 @@ function buildWhereClause(filter) {
     }
     return clauses.join(' AND ');
 }
-async function adoFetchJson(url, init) {
-    const response = await fetch(url, init);
-    const bodyText = await response.text();
-    if (!response.ok) {
-        const snippet = bodyText.replace(/\s+/g, ' ').trim().slice(0, 300);
-        throw new Error(`ADO ${response.status}: ${response.statusText}${snippet ? ` - ${snippet}` : ''}`);
-    }
-    return JSON.parse(bodyText);
-}
 async function fetchWorkItems(filter) {
     if (!filter.iterationPath && !filter.areaPath) {
         throw new Error('Either iterationPath or areaPath must be provided.');
     }
     const config = getAdoConfigFromEnv();
-    const authHeader = getAuthHeaderValue(config.pat);
+    const authHeader = (0, adoClient_1.getAdoAuthHeader)();
     const whereClause = buildWhereClause(filter);
     const wiqlBody = {
         query: `
@@ -56,7 +42,7 @@ async function fetchWorkItems(filter) {
     `
     };
     const wiqlUrl = `${config.organizationUrl}/${config.project}/_apis/wit/wiql?api-version=7.1`;
-    const wiqlResponse = await adoFetchJson(wiqlUrl, {
+    const wiqlResponse = await (0, adoClient_1.adoFetchJson)(wiqlUrl, {
         method: 'POST',
         headers: {
             Authorization: authHeader,
@@ -70,7 +56,7 @@ async function fetchWorkItems(filter) {
     }
     const fields = ['System.Id', 'System.Title', 'System.AreaPath'].join(',');
     const itemsUrl = `${config.organizationUrl}/${config.project}/_apis/wit/workitems?ids=${ids.join(',')}&fields=${encodeURIComponent(fields)}&api-version=7.1`;
-    const detailsResponse = await adoFetchJson(itemsUrl, {
+    const detailsResponse = await (0, adoClient_1.adoFetchJson)(itemsUrl, {
         method: 'GET',
         headers: { Authorization: authHeader }
     });

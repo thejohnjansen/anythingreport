@@ -1,3 +1,4 @@
+import { adoFetchJson, getAdoAuthHeader } from './adoClient';
 import type { NormalizedWorkItem } from './types';
 
 type WorkItemQueryFilter = {
@@ -8,7 +9,6 @@ type WorkItemQueryFilter = {
 type AdoConfig = {
   organizationUrl: string;
   project: string;
-  pat: string;
 };
 
 type WiqlResponse = {
@@ -28,22 +28,15 @@ type WorkItemsBatchResponse = {
 function getAdoConfigFromEnv(): AdoConfig {
   const organizationUrl = process.env.ADO_ORGANIZATION_URL;
   const project = process.env.ADO_PROJECT;
-  const pat = process.env.ADO_PAT;
 
-  if (!organizationUrl || !project || !pat) {
-    throw new Error('Missing ADO configuration. Set ADO_ORGANIZATION_URL, ADO_PROJECT, and ADO_PAT.');
+  if (!organizationUrl || !project) {
+    throw new Error('Missing ADO configuration. Set ADO_ORGANIZATION_URL and ADO_PROJECT.');
   }
 
   return {
     organizationUrl: organizationUrl.replace(/\/+$/, ''),
-    project,
-    pat
+    project
   };
-}
-
-function getAuthHeaderValue(pat: string): string {
-  // Azure DevOps PAT auth uses basic auth with empty username and PAT as password.
-  return `Basic ${Buffer.from(`:${pat}`).toString('base64')}`;
 }
 
 function escapeWiqlString(value: string): string {
@@ -63,25 +56,13 @@ function buildWhereClause(filter: WorkItemQueryFilter): string {
   return clauses.join(' AND ');
 }
 
-async function adoFetchJson<T>(url: string, init: RequestInit): Promise<T> {
-  const response = await fetch(url, init);
-  const bodyText = await response.text();
-
-  if (!response.ok) {
-    const snippet = bodyText.replace(/\s+/g, ' ').trim().slice(0, 300);
-    throw new Error(`ADO ${response.status}: ${response.statusText}${snippet ? ` - ${snippet}` : ''}`);
-  }
-
-  return JSON.parse(bodyText) as T;
-}
-
 export async function fetchWorkItems(filter: WorkItemQueryFilter): Promise<NormalizedWorkItem[]> {
   if (!filter.iterationPath && !filter.areaPath) {
     throw new Error('Either iterationPath or areaPath must be provided.');
   }
 
   const config = getAdoConfigFromEnv();
-  const authHeader = getAuthHeaderValue(config.pat);
+  const authHeader = getAdoAuthHeader();
   const whereClause = buildWhereClause(filter);
 
   const wiqlBody = {

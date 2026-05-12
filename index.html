@@ -1242,6 +1242,22 @@
             return data;
         }
 
+        function getApiBaseUrl() {
+            if (window.__arApiConfig && window.__arApiConfig.baseUrl) {
+                return window.__arApiConfig.baseUrl.replace(/\/+$/, '');
+            }
+
+            if (location.hostname === 'localhost' && location.port === '3456') {
+                return 'http://localhost:7071/api';
+            }
+
+            return '/api';
+        }
+
+        function getApiUrl(path) {
+            return getApiBaseUrl() + path;
+        }
+
         /* ── Render RETRO view ───────────────────────────────────── */
         function renderRetro(rows, retroLinkBase) {
             lastRetroRows = rows;
@@ -1458,17 +1474,17 @@
                 if (flatView) slidePayload.flatView = true;
 
                 var [slideRes, docRes, retroRes] = await Promise.all([
-                    fetch('/api/slides', {
+                    fetch(getApiUrl('/slides'), {
                         method: 'POST',
                         headers: { 'Content-Type': 'application/json' },
                         body: JSON.stringify(slidePayload)
                     }),
-                    fetch('/api/doc', {
+                    fetch(getApiUrl('/doc'), {
                         method: 'POST',
                         headers: { 'Content-Type': 'application/json' },
                         body: JSON.stringify({ queryUrl: url })
                     }),
-                    fetch('/api/retro', {
+                    fetch(getApiUrl('/retro'), {
                         method: 'POST',
                         headers: { 'Content-Type': 'application/json' },
                         body: JSON.stringify({ queryUrl: url })

@@ -1,0 +1,22 @@
+{
+  "IsEncrypted": false,
+  "Values": {
+    "AzureWebJobsStorage": "DefaultEndpointsProtocol=https;AccountName=your-storage-account;AccountKey=your-storage-key;EndpointSuffix=core.windows.net",
+    "FUNCTIONS_WORKER_RUNTIME": "node",
+    "ADO_ORGANIZATION_URL": "https://dev.azure.com/your-org",
+    "ADO_PROJECT": "your-project",
+    "ADO_PAT": "",
+    "GRAPH_ACCESS_TOKEN": "",
+    "GRAPH_UPLOAD_MODE": "delegated",
+    "GRAPH_UPLOAD_FOLDER": "AnythingReport/Exports",
+    "GRAPH_DRIVE_ID": "",
+    "GRAPH_USER_ID": "",
+    "COSMOS_CONNECTION_STRING": "AccountEndpoint=https://your-account.documents.azure.com:443/;AccountKey=your-cosmos-key;",
+    "COSMOS_DATABASE": "stories-db",
+    "COSMOS_CONTAINER": "stories"
+  },
+  "Host": {
+    "CORS": "http://localhost:3456",
+    "CORSCredentials": false
+  }
+}

@@ -3,9 +3,6 @@
   "Values": {
     "AzureWebJobsStorage": "DefaultEndpointsProtocol=https;AccountName=your-storage-account;AccountKey=your-storage-key;EndpointSuffix=core.windows.net",
     "FUNCTIONS_WORKER_RUNTIME": "node",
-    "ADO_ORGANIZATION_URL": "https://dev.azure.com/your-org",
-    "ADO_PROJECT": "your-project",
-    "ADO_PAT": "",
     "GRAPH_ACCESS_TOKEN": "",
     "GRAPH_UPLOAD_MODE": "delegated",
     "GRAPH_UPLOAD_FOLDER": "AnythingReport/Exports",

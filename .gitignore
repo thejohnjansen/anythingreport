@@ -2,3 +2,8 @@ node_modules/
 azure-functions-backend/node_modules/
 azure-functions-backend/dist/
 azure-functions-backend/local.settings.json
+
+# Local dev / scratch files
+pptx_inspect/
+*.pptx
+

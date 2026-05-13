@@ -40,9 +40,15 @@ if (-not $SkipOrigin) {
 
 if (-not $SkipGithub) {
     Write-Host "Mirroring anythingReport subtree to github/main..."
-    git subtree push --prefix="$prefix" github main
+    $splitSha = (git subtree split --prefix="$prefix" HEAD).Trim()
+    if (-not $splitSha) {
+        throw "Failed to generate subtree split SHA."
+    }
+
+    # Force update is intentional: github/main is treated as a mirror of this subtree.
+    git push --force github "$splitSha`:main"
     if ($LASTEXITCODE -ne 0) {
-        throw "Subtree push to github/main failed."
+        throw "Mirror push to github/main failed."
     }
 }
 

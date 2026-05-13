@@ -20,6 +20,13 @@ jobs:
           submodules: true
           lfs: false
 
+      - name: Prepare static app artifacts
+        run: |
+          rm -rf swa-app
+          mkdir -p swa-app
+          cp index.html styles.css pptx-export.js swa-app/
+          if [ -f staticwebapp.config.json ]; then cp staticwebapp.config.json swa-app/; fi
+
       - name: Build And Deploy
         id: builddeploy
         uses: Azure/static-web-apps-deploy@v1
@@ -29,7 +36,7 @@ jobs:
           action: "upload"
           ###### Repository/Build Configurations ######
           # app_location: the folder containing your static web app files (index.html lives here)
-          app_location: "."
+          app_location: "swa-app"
           # api_location: the folder containing your Azure Functions source
           api_location: "azure-functions-backend"
           # output_location: leave empty because this is a plain static site (no build step like React/Vue)

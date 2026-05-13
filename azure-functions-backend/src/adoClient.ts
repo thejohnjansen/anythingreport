@@ -68,7 +68,11 @@ function getCachedAzureCliToken(): string | null {
   }
 }
 
-export function getAdoAuthHeader(): string {
+export function getAdoAuthHeader(incomingBearerToken?: string): string {
+  if (incomingBearerToken && incomingBearerToken.trim()) {
+    return `Bearer ${incomingBearerToken.trim()}`;
+  }
+
   const azureCliToken = getCachedAzureCliToken();
   if (azureCliToken) {
     return `Bearer ${azureCliToken}`;
@@ -114,10 +118,10 @@ export function parseQueryUrl(raw: string): ParsedAdoQueryUrl {
   throw new Error('Could not parse ADO query URL. Expected an ADO query link or a query GUID.');
 }
 
-export async function adoFetchJson<T>(url: string, init?: RequestInit): Promise<T> {
+export async function adoFetchJson<T>(url: string, init?: RequestInit, incomingBearerToken?: string): Promise<T> {
   const headers = new Headers(init?.headers);
   if (!headers.has('Authorization')) {
-    headers.set('Authorization', getAdoAuthHeader());
+    headers.set('Authorization', getAdoAuthHeader(incomingBearerToken));
   }
 
   const response = await fetch(url, { ...init, headers });
@@ -137,16 +141,24 @@ export async function adoFetchJson<T>(url: string, init?: RequestInit): Promise<
   return JSON.parse(bodyText) as T;
 }
 
-export async function runTreeQuery(baseUrl: string, project: string, queryId: string): Promise<WiqlTreeResult> {
+export async function runTreeQuery(
+  baseUrl: string,
+  project: string,
+  queryId: string,
+  incomingBearerToken?: string
+): Promise<WiqlTreeResult> {
   return adoFetchJson<WiqlTreeResult>(
-    `${baseUrl}/${project}/_apis/wit/wiql/${queryId}?api-version=7.0`
+    `${baseUrl}/${project}/_apis/wit/wiql/${queryId}?api-version=7.0`,
+    undefined,
+    incomingBearerToken
   );
 }
 
 export async function fetchWorkItemsByIds(
   baseUrl: string,
   project: string,
-  ids: number[]
+  ids: number[],
+  incomingBearerToken?: string
 ): Promise<Record<number, AzureDevOpsWorkItem>> {
   if (!ids.length) {
     return {};
@@ -170,7 +182,9 @@ export async function fetchWorkItemsByIds(
   for (let index = 0; index < ids.length; index += 200) {
     const batch = ids.slice(index, index + 200);
     const data = await adoFetchJson<{ value?: AzureDevOpsWorkItem[] }>(
-      `${baseUrl}/${project}/_apis/wit/workitems?ids=${batch.join(',')}&fields=${fields}&api-version=7.0`
+      `${baseUrl}/${project}/_apis/wit/workitems?ids=${batch.join(',')}&fields=${fields}&api-version=7.0`,
+      undefined,
+      incomingBearerToken
     );
     for (const workItem of data.value ?? []) {
       items[workItem.id] = workItem;

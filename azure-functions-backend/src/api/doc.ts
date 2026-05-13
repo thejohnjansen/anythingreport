@@ -1,5 +1,6 @@
 import { app, HttpRequest, HttpResponseInit } from '@azure/functions';
 import { getDocSections } from '../queryAuxService';
+import { getIncomingAdoToken, requireMicrosoftUser } from '../requestAuth';
 
 function json(body: unknown, status = 200): HttpResponseInit {
   return {
@@ -14,13 +15,18 @@ app.http('getDocSections', {
   route: 'doc',
   authLevel: 'anonymous',
   handler: async (request: HttpRequest): Promise<HttpResponseInit> => {
+    const accessError = requireMicrosoftUser(request);
+    if (accessError) {
+      return accessError;
+    }
+
     const body = (await request.json()) as { queryUrl?: string };
     if (!body.queryUrl) {
       return json({ error: 'queryUrl is required.' }, 400);
     }
 
     try {
-      const result = await getDocSections(body.queryUrl);
+      const result = await getDocSections(body.queryUrl, getIncomingAdoToken(request));
       return json(result);
     } catch (error) {
       const message = error instanceof Error ? error.message : 'Unknown error';

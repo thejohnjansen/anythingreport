@@ -162,9 +162,17 @@ function buildTitleContext(queryResult: WiqlTreeResult, workItemMap: Record<numb
   };
 }
 
-async function getFieldsAsOf(baseUrl: string, project: string, workItemId: number, asOfDate: string): Promise<MidpointFields> {
+async function getFieldsAsOf(
+  baseUrl: string,
+  project: string,
+  workItemId: number,
+  asOfDate: string,
+  incomingBearerToken?: string
+): Promise<MidpointFields> {
   const data = await adoFetchJson<{ value?: AzureDevOpsWorkItem[] }>(
-    `${baseUrl}/${project}/_apis/wit/workitems/${workItemId}/revisions?api-version=7.0`
+    `${baseUrl}/${project}/_apis/wit/workitems/${workItemId}/revisions?api-version=7.0`,
+    undefined,
+    incomingBearerToken
   );
   const cutoff = new Date(asOfDate);
   cutoff.setUTCHours(23, 59, 59, 999);
@@ -191,7 +199,8 @@ async function batchHistoricalFields(
   baseUrl: string,
   project: string,
   ids: number[],
-  asOfDate: string
+  asOfDate: string,
+  incomingBearerToken?: string
 ): Promise<Record<number, MidpointFields>> {
   const map: Record<number, MidpointFields> = {};
   const chunks: number[][] = [];
@@ -200,7 +209,9 @@ async function batchHistoricalFields(
   }
 
   for (const chunk of chunks) {
-    const results = await Promise.all(chunk.map((id) => getFieldsAsOf(baseUrl, project, id, asOfDate)));
+    const results = await Promise.all(
+      chunk.map((id) => getFieldsAsOf(baseUrl, project, id, asOfDate, incomingBearerToken))
+    );
     chunk.forEach((id, resultIndex) => {
       map[id] = results[resultIndex];
     });
@@ -396,9 +407,12 @@ function buildFlatSlides(
     .filter((slide) => slide.items.length > 0);
 }
 
-export async function getSlidesPreview(input: { queryUrl: string; midpointDate?: string; flatView?: boolean }): Promise<SlidesPreviewResult> {
+export async function getSlidesPreview(
+  input: { queryUrl: string; midpointDate?: string; flatView?: boolean },
+  incomingBearerToken?: string
+): Promise<SlidesPreviewResult> {
   const { baseUrl, project, queryId } = parseQueryUrl(input.queryUrl);
-  const queryResult = await runTreeQuery(baseUrl, project, queryId);
+  const queryResult = await runTreeQuery(baseUrl, project, queryId, incomingBearerToken);
 
   const allIds = new Set<number>();
   const leafIds = new Set<number>();
@@ -417,9 +431,9 @@ export async function getSlidesPreview(input: { queryUrl: string; midpointDate?:
     }
   }
 
-  const workItemMap = await fetchWorkItemsByIds(baseUrl, project, [...allIds]);
+  const workItemMap = await fetchWorkItemsByIds(baseUrl, project, [...allIds], incomingBearerToken);
   const midpointMap = input.midpointDate
-    ? await batchHistoricalFields(baseUrl, project, [...leafIds], input.midpointDate)
+    ? await batchHistoricalFields(baseUrl, project, [...leafIds], input.midpointDate, incomingBearerToken)
     : null;
 
   const titleContext = buildTitleContext(queryResult, workItemMap);

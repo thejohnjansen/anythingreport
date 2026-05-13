@@ -1,6 +1,7 @@
 import { app, HttpRequest, HttpResponseInit, InvocationContext } from '@azure/functions';
 import { uploadPptToGraph } from '../graphUploadService';
 import { generatePpt } from '../pptService';
+import { requireMicrosoftUser } from '../requestAuth';
 import { StoryRepository } from '../storyRepository';
 import type { StoryUpdateRequest, StoryUpsertRequest } from '../types';
 
@@ -37,6 +38,11 @@ app.http('getStories', {
   route: 'stories',
   authLevel: 'anonymous',
   handler: async (request: HttpRequest, context: InvocationContext): Promise<HttpResponseInit> => {
+    const accessError = requireMicrosoftUser(request);
+    if (accessError) {
+      return accessError;
+    }
+
     const cycle = getQueryValue(request, 'cycle');
     if (!cycle) {
       return json({ error: 'Query string parameter cycle is required.' }, { status: 400 });
@@ -59,6 +65,11 @@ app.http('postStory', {
   route: 'stories',
   authLevel: 'anonymous',
   handler: async (request: HttpRequest): Promise<HttpResponseInit> => {
+    const accessError = requireMicrosoftUser(request);
+    if (accessError) {
+      return accessError;
+    }
+
     try {
       const body = await readJsonBody<StoryUpsertRequest>(request);
       const repository = createRepository();
@@ -76,6 +87,11 @@ app.http('putStory', {
   route: 'stories/{id}',
   authLevel: 'anonymous',
   handler: async (request: HttpRequest): Promise<HttpResponseInit> => {
+    const accessError = requireMicrosoftUser(request);
+    if (accessError) {
+      return accessError;
+    }
+
     const id = request.params.id;
     if (!id) {
       return json({ error: 'Story id is required.' }, { status: 400 });
@@ -105,6 +121,11 @@ app.http('exportStoriesPpt', {
   route: 'stories/export',
   authLevel: 'anonymous',
   handler: async (request: HttpRequest, context: InvocationContext): Promise<HttpResponseInit> => {
+    const accessError = requireMicrosoftUser(request);
+    if (accessError) {
+      return accessError;
+    }
+
     const cycle = getQueryValue(request, 'cycle');
     if (!cycle) {
       return json({ error: 'Query string parameter cycle is required.' }, { status: 400 });

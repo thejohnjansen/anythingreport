@@ -31,7 +31,10 @@ function getCachedAzureCliToken() {
         return null;
     }
 }
-function getAdoAuthHeader() {
+function getAdoAuthHeader(incomingBearerToken) {
+    if (incomingBearerToken && incomingBearerToken.trim()) {
+        return `Bearer ${incomingBearerToken.trim()}`;
+    }
     const azureCliToken = getCachedAzureCliToken();
     if (azureCliToken) {
         return `Bearer ${azureCliToken}`;
@@ -65,10 +68,10 @@ function parseQueryUrl(raw) {
     }
     throw new Error('Could not parse ADO query URL. Expected an ADO query link or a query GUID.');
 }
-async function adoFetchJson(url, init) {
+async function adoFetchJson(url, init, incomingBearerToken) {
     const headers = new Headers(init?.headers);
     if (!headers.has('Authorization')) {
-        headers.set('Authorization', getAdoAuthHeader());
+        headers.set('Authorization', getAdoAuthHeader(incomingBearerToken));
     }
     const response = await fetch(url, { ...init, headers });
     const bodyText = await response.text();
@@ -83,10 +86,10 @@ async function adoFetchJson(url, init) {
     }
     return JSON.parse(bodyText);
 }
-async function runTreeQuery(baseUrl, project, queryId) {
-    return adoFetchJson(`${baseUrl}/${project}/_apis/wit/wiql/${queryId}?api-version=7.0`);
+async function runTreeQuery(baseUrl, project, queryId, incomingBearerToken) {
+    return adoFetchJson(`${baseUrl}/${project}/_apis/wit/wiql/${queryId}?api-version=7.0`, undefined, incomingBearerToken);
 }
-async function fetchWorkItemsByIds(baseUrl, project, ids) {
+async function fetchWorkItemsByIds(baseUrl, project, ids, incomingBearerToken) {
     if (!ids.length) {
         return {};
     }
@@ -106,7 +109,7 @@ async function fetchWorkItemsByIds(baseUrl, project, ids) {
     const items = {};
     for (let index = 0; index < ids.length; index += 200) {
         const batch = ids.slice(index, index + 200);
-        const data = await adoFetchJson(`${baseUrl}/${project}/_apis/wit/workitems?ids=${batch.join(',')}&fields=${fields}&api-version=7.0`);
+        const data = await adoFetchJson(`${baseUrl}/${project}/_apis/wit/workitems?ids=${batch.join(',')}&fields=${fields}&api-version=7.0`, undefined, incomingBearerToken);
         for (const workItem of data.value ?? []) {
             items[workItem.id] = workItem;
         }

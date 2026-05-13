@@ -1,5 +1,6 @@
 import { app, HttpRequest, HttpResponseInit } from '@azure/functions';
 import { generateReportPpt, type GenerateReportPptInput } from '../reportPptService';
+import { requireMicrosoftUser } from '../requestAuth';
 
 function errorResponse(message: string, status = 500): HttpResponseInit {
   return {
@@ -14,6 +15,11 @@ app.http('exportSlidesPpt', {
   route: 'slides/export',
   authLevel: 'anonymous',
   handler: async (request: HttpRequest): Promise<HttpResponseInit> => {
+    const accessError = requireMicrosoftUser(request);
+    if (accessError) {
+      return accessError;
+    }
+
     const body = (await request.json()) as Partial<GenerateReportPptInput>;
     if (!Array.isArray(body.slides)) {
       return errorResponse('slides array is required.', 400);

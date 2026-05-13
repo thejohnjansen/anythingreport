@@ -162,14 +162,14 @@ function buildRetroRows(queryResult: WiqlTreeResult, workItemMap: Record<number,
   return rows;
 }
 
-async function getQueryWorkItemMap(queryUrl: string): Promise<{
+async function getQueryWorkItemMap(queryUrl: string, incomingBearerToken?: string): Promise<{
   baseUrl: string;
   project: string;
   queryResult: WiqlTreeResult;
   workItemMap: Record<number, AzureDevOpsWorkItem>;
 }> {
   const { baseUrl, project, queryId } = parseQueryUrl(queryUrl);
-  const queryResult = await runTreeQuery(baseUrl, project, queryId);
+  const queryResult = await runTreeQuery(baseUrl, project, queryId, incomingBearerToken);
 
   const allIds = new Set<number>();
   for (const relation of queryResult.workItemRelations || []) {
@@ -178,20 +178,26 @@ async function getQueryWorkItemMap(queryUrl: string): Promise<{
     }
   }
 
-  const workItemMap = await fetchWorkItemsByIds(baseUrl, project, [...allIds]);
+  const workItemMap = await fetchWorkItemsByIds(baseUrl, project, [...allIds], incomingBearerToken);
   return { baseUrl, project, queryResult, workItemMap };
 }
 
-export async function getDocSections(queryUrl: string): Promise<{ sections: DocSection[]; linkBase: string }> {
-  const { baseUrl, project, queryResult, workItemMap } = await getQueryWorkItemMap(queryUrl);
+export async function getDocSections(
+  queryUrl: string,
+  incomingBearerToken?: string
+): Promise<{ sections: DocSection[]; linkBase: string }> {
+  const { baseUrl, project, queryResult, workItemMap } = await getQueryWorkItemMap(queryUrl, incomingBearerToken);
   return {
     sections: buildDocSections(queryResult, workItemMap),
     linkBase: `${baseUrl}/${project}/_workitems/edit/`
   };
 }
 
-export async function getRetroRows(queryUrl: string): Promise<{ rows: RetroRow[]; linkBase: string }> {
-  const { baseUrl, project, queryResult, workItemMap } = await getQueryWorkItemMap(queryUrl);
+export async function getRetroRows(
+  queryUrl: string,
+  incomingBearerToken?: string
+): Promise<{ rows: RetroRow[]; linkBase: string }> {
+  const { baseUrl, project, queryResult, workItemMap } = await getQueryWorkItemMap(queryUrl, incomingBearerToken);
   return {
     rows: buildRetroRows(queryResult, workItemMap),
     linkBase: `${baseUrl}/${project}/_workitems/edit/`

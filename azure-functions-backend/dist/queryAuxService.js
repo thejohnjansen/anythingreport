@@ -109,27 +109,27 @@ function buildRetroRows(queryResult, workItemMap) {
     }
     return rows;
 }
-async function getQueryWorkItemMap(queryUrl) {
+async function getQueryWorkItemMap(queryUrl, incomingBearerToken) {
     const { baseUrl, project, queryId } = (0, adoClient_1.parseQueryUrl)(queryUrl);
-    const queryResult = await (0, adoClient_1.runTreeQuery)(baseUrl, project, queryId);
+    const queryResult = await (0, adoClient_1.runTreeQuery)(baseUrl, project, queryId, incomingBearerToken);
     const allIds = new Set();
     for (const relation of queryResult.workItemRelations || []) {
         if (relation.target) {
             allIds.add(relation.target.id);
         }
     }
-    const workItemMap = await (0, adoClient_1.fetchWorkItemsByIds)(baseUrl, project, [...allIds]);
+    const workItemMap = await (0, adoClient_1.fetchWorkItemsByIds)(baseUrl, project, [...allIds], incomingBearerToken);
     return { baseUrl, project, queryResult, workItemMap };
 }
-async function getDocSections(queryUrl) {
-    const { baseUrl, project, queryResult, workItemMap } = await getQueryWorkItemMap(queryUrl);
+async function getDocSections(queryUrl, incomingBearerToken) {
+    const { baseUrl, project, queryResult, workItemMap } = await getQueryWorkItemMap(queryUrl, incomingBearerToken);
     return {
         sections: buildDocSections(queryResult, workItemMap),
         linkBase: `${baseUrl}/${project}/_workitems/edit/`
     };
 }
-async function getRetroRows(queryUrl) {
-    const { baseUrl, project, queryResult, workItemMap } = await getQueryWorkItemMap(queryUrl);
+async function getRetroRows(queryUrl, incomingBearerToken) {
+    const { baseUrl, project, queryResult, workItemMap } = await getQueryWorkItemMap(queryUrl, incomingBearerToken);
     return {
         rows: buildRetroRows(queryResult, workItemMap),
         linkBase: `${baseUrl}/${project}/_workitems/edit/`

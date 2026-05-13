@@ -2,6 +2,7 @@
 Object.defineProperty(exports, "__esModule", { value: true });
 const functions_1 = require("@azure/functions");
 const reportPptService_1 = require("../reportPptService");
+const requestAuth_1 = require("../requestAuth");
 function errorResponse(message, status = 500) {
     return {
         status,
@@ -14,6 +15,10 @@ functions_1.app.http('exportSlidesPpt', {
     route: 'slides/export',
     authLevel: 'anonymous',
     handler: async (request) => {
+        const accessError = (0, requestAuth_1.requireMicrosoftUser)(request);
+        if (accessError) {
+            return accessError;
+        }
         const body = (await request.json());
         if (!Array.isArray(body.slides)) {
             return errorResponse('slides array is required.', 400);

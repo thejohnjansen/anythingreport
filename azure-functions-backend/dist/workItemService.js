@@ -26,12 +26,12 @@ function buildWhereClause(filter) {
     }
     return clauses.join(' AND ');
 }
-async function fetchWorkItems(filter) {
+async function fetchWorkItems(filter, incomingBearerToken) {
     if (!filter.iterationPath && !filter.areaPath) {
         throw new Error('Either iterationPath or areaPath must be provided.');
     }
     const config = getAdoConfigFromEnv();
-    const authHeader = (0, adoClient_1.getAdoAuthHeader)();
+    const authHeader = (0, adoClient_1.getAdoAuthHeader)(incomingBearerToken);
     const whereClause = buildWhereClause(filter);
     const wiqlBody = {
         query: `

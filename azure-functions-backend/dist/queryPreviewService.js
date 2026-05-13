@@ -110,8 +110,8 @@ function buildTitleContext(queryResult, workItemMap) {
         deckFileName
     };
 }
-async function getFieldsAsOf(baseUrl, project, workItemId, asOfDate) {
-    const data = await (0, adoClient_1.adoFetchJson)(`${baseUrl}/${project}/_apis/wit/workitems/${workItemId}/revisions?api-version=7.0`);
+async function getFieldsAsOf(baseUrl, project, workItemId, asOfDate, incomingBearerToken) {
+    const data = await (0, adoClient_1.adoFetchJson)(`${baseUrl}/${project}/_apis/wit/workitems/${workItemId}/revisions?api-version=7.0`, undefined, incomingBearerToken);
     const cutoff = new Date(asOfDate);
     cutoff.setUTCHours(23, 59, 59, 999);
     let best = null;
@@ -129,14 +129,14 @@ async function getFieldsAsOf(baseUrl, project, workItemId, asOfDate) {
         riskComment: best?.fields['OSG.RiskAssessmentComment'] || ''
     };
 }
-async function batchHistoricalFields(baseUrl, project, ids, asOfDate) {
+async function batchHistoricalFields(baseUrl, project, ids, asOfDate, incomingBearerToken) {
     const map = {};
     const chunks = [];
     for (let index = 0; index < ids.length; index += 10) {
         chunks.push(ids.slice(index, index + 10));
     }
     for (const chunk of chunks) {
-        const results = await Promise.all(chunk.map((id) => getFieldsAsOf(baseUrl, project, id, asOfDate)));
+        const results = await Promise.all(chunk.map((id) => getFieldsAsOf(baseUrl, project, id, asOfDate, incomingBearerToken)));
         chunk.forEach((id, resultIndex) => {
             map[id] = results[resultIndex];
         });
@@ -299,9 +299,9 @@ function buildFlatSlides(queryResult, workItemMap, midpointMap, flatSlideTitle, 
     }))
         .filter((slide) => slide.items.length > 0);
 }
-async function getSlidesPreview(input) {
+async function getSlidesPreview(input, incomingBearerToken) {
     const { baseUrl, project, queryId } = (0, adoClient_1.parseQueryUrl)(input.queryUrl);
-    const queryResult = await (0, adoClient_1.runTreeQuery)(baseUrl, project, queryId);
+    const queryResult = await (0, adoClient_1.runTreeQuery)(baseUrl, project, queryId, incomingBearerToken);
     const allIds = new Set();
     const leafIds = new Set();
     const parentIds = new Set();
@@ -318,9 +318,9 @@ async function getSlidesPreview(input) {
             leafIds.add(id);
         }
     }
-    const workItemMap = await (0, adoClient_1.fetchWorkItemsByIds)(baseUrl, project, [...allIds]);
+    const workItemMap = await (0, adoClient_1.fetchWorkItemsByIds)(baseUrl, project, [...allIds], incomingBearerToken);
     const midpointMap = input.midpointDate
-        ? await batchHistoricalFields(baseUrl, project, [...leafIds], input.midpointDate)
+        ? await batchHistoricalFields(baseUrl, project, [...leafIds], input.midpointDate, incomingBearerToken)
         : null;
     const titleContext = buildTitleContext(queryResult, workItemMap);
     const slides = input.flatView

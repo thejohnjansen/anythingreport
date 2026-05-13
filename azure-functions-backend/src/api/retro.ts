@@ -1,5 +1,6 @@
 import { app, HttpRequest, HttpResponseInit } from '@azure/functions';
 import { getRetroRows } from '../queryAuxService';
+import { getIncomingAdoToken, requireMicrosoftUser } from '../requestAuth';
 
 function json(body: unknown, status = 200): HttpResponseInit {
   return {
@@ -14,13 +15,18 @@ app.http('getRetroRows', {
   route: 'retro',
   authLevel: 'anonymous',
   handler: async (request: HttpRequest): Promise<HttpResponseInit> => {
+    const accessError = requireMicrosoftUser(request);
+    if (accessError) {
+      return accessError;
+    }
+
     const body = (await request.json()) as { queryUrl?: string };
     if (!body.queryUrl) {
       return json({ error: 'queryUrl is required.' }, 400);
     }
 
     try {
-      const result = await getRetroRows(body.queryUrl);
+      const result = await getRetroRows(body.queryUrl, getIncomingAdoToken(request));
       return json(result);
     } catch (error) {
       const message = error instanceof Error ? error.message : 'Unknown error';

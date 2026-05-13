@@ -56,13 +56,16 @@ function buildWhereClause(filter: WorkItemQueryFilter): string {
   return clauses.join(' AND ');
 }
 
-export async function fetchWorkItems(filter: WorkItemQueryFilter): Promise<NormalizedWorkItem[]> {
+export async function fetchWorkItems(
+  filter: WorkItemQueryFilter,
+  incomingBearerToken?: string
+): Promise<NormalizedWorkItem[]> {
   if (!filter.iterationPath && !filter.areaPath) {
     throw new Error('Either iterationPath or areaPath must be provided.');
   }
 
   const config = getAdoConfigFromEnv();
-  const authHeader = getAdoAuthHeader();
+  const authHeader = getAdoAuthHeader(incomingBearerToken);
   const whereClause = buildWhereClause(filter);
 
   const wiqlBody = {

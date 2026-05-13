@@ -2,6 +2,7 @@
 Object.defineProperty(exports, "__esModule", { value: true });
 const functions_1 = require("@azure/functions");
 const workItemService_1 = require("../workItemService");
+const requestAuth_1 = require("../requestAuth");
 function json(body, status = 200) {
     return {
         status,
@@ -14,13 +15,17 @@ functions_1.app.http('getWorkItems', {
     route: 'workitems',
     authLevel: 'anonymous',
     handler: async (request) => {
+        const accessError = (0, requestAuth_1.requireMicrosoftUser)(request);
+        if (accessError) {
+            return accessError;
+        }
         const iterationPath = request.query.get('iterationPath') ?? undefined;
         const areaPath = request.query.get('areaPath') ?? undefined;
         if (!iterationPath && !areaPath) {
             return json({ error: 'Provide iterationPath or areaPath query parameter.' }, 400);
         }
         try {
-            const items = await (0, workItemService_1.fetchWorkItems)({ iterationPath, areaPath });
+            const items = await (0, workItemService_1.fetchWorkItems)({ iterationPath, areaPath }, (0, requestAuth_1.getIncomingAdoToken)(request));
             return json({ items });
         }
         catch (error) {

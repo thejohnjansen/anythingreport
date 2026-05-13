@@ -1,5 +1,6 @@
 import { app, HttpRequest, HttpResponseInit } from '@azure/functions';
 import { fetchWorkItems } from '../workItemService';
+import { getIncomingAdoToken, requireMicrosoftUser } from '../requestAuth';
 
 function json(body: unknown, status = 200): HttpResponseInit {
   return {
@@ -14,6 +15,11 @@ app.http('getWorkItems', {
   route: 'workitems',
   authLevel: 'anonymous',
   handler: async (request: HttpRequest): Promise<HttpResponseInit> => {
+    const accessError = requireMicrosoftUser(request);
+    if (accessError) {
+      return accessError;
+    }
+
     const iterationPath = request.query.get('iterationPath') ?? undefined;
     const areaPath = request.query.get('areaPath') ?? undefined;
 
@@ -22,7 +28,7 @@ app.http('getWorkItems', {
     }
 
     try {
-      const items = await fetchWorkItems({ iterationPath, areaPath });
+      const items = await fetchWorkItems({ iterationPath, areaPath }, getIncomingAdoToken(request));
       return json({ items });
     } catch (error) {
       const message = error instanceof Error ? error.message : 'Unknown error';

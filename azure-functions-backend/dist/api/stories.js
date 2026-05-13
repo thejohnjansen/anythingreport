@@ -3,6 +3,7 @@ Object.defineProperty(exports, "__esModule", { value: true });
 const functions_1 = require("@azure/functions");
 const graphUploadService_1 = require("../graphUploadService");
 const pptService_1 = require("../pptService");
+const requestAuth_1 = require("../requestAuth");
 const storyRepository_1 = require("../storyRepository");
 function createRepository() {
     return new storyRepository_1.StoryRepository();
@@ -32,6 +33,10 @@ functions_1.app.http('getStories', {
     route: 'stories',
     authLevel: 'anonymous',
     handler: async (request, context) => {
+        const accessError = (0, requestAuth_1.requireMicrosoftUser)(request);
+        if (accessError) {
+            return accessError;
+        }
         const cycle = getQueryValue(request, 'cycle');
         if (!cycle) {
             return json({ error: 'Query string parameter cycle is required.' }, { status: 400 });
@@ -53,6 +58,10 @@ functions_1.app.http('postStory', {
     route: 'stories',
     authLevel: 'anonymous',
     handler: async (request) => {
+        const accessError = (0, requestAuth_1.requireMicrosoftUser)(request);
+        if (accessError) {
+            return accessError;
+        }
         try {
             const body = await readJsonBody(request);
             const repository = createRepository();
@@ -70,6 +79,10 @@ functions_1.app.http('putStory', {
     route: 'stories/{id}',
     authLevel: 'anonymous',
     handler: async (request) => {
+        const accessError = (0, requestAuth_1.requireMicrosoftUser)(request);
+        if (accessError) {
+            return accessError;
+        }
         const id = request.params.id;
         if (!id) {
             return json({ error: 'Story id is required.' }, { status: 400 });
@@ -97,6 +110,10 @@ functions_1.app.http('exportStoriesPpt', {
     route: 'stories/export',
     authLevel: 'anonymous',
     handler: async (request, context) => {
+        const accessError = (0, requestAuth_1.requireMicrosoftUser)(request);
+        if (accessError) {
+            return accessError;
+        }
         const cycle = getQueryValue(request, 'cycle');
         if (!cycle) {
             return json({ error: 'Query string parameter cycle is required.' }, { status: 400 });

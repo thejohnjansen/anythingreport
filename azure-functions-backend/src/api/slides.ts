@@ -1,5 +1,6 @@
 import { app, HttpRequest, HttpResponseInit } from '@azure/functions';
 import { getSlidesPreview } from '../queryPreviewService';
+import { getIncomingAdoToken, requireMicrosoftUser } from '../requestAuth';
 
 function json(body: unknown, status = 200): HttpResponseInit {
   return {
@@ -14,6 +15,11 @@ app.http('getSlidesPreview', {
   route: 'slides',
   authLevel: 'anonymous',
   handler: async (request: HttpRequest): Promise<HttpResponseInit> => {
+    const accessError = requireMicrosoftUser(request);
+    if (accessError) {
+      return accessError;
+    }
+
     const body = (await request.json()) as {
       queryUrl?: string;
       midpointDate?: string;
@@ -25,7 +31,10 @@ app.http('getSlidesPreview', {
     }
 
     try {
-      const preview = await getSlidesPreview(body as { queryUrl: string; midpointDate?: string; flatView?: boolean });
+      const preview = await getSlidesPreview(
+        body as { queryUrl: string; midpointDate?: string; flatView?: boolean },
+        getIncomingAdoToken(request)
+      );
       return json(preview);
     } catch (error) {
       const message = error instanceof Error ? error.message : 'Unknown error';

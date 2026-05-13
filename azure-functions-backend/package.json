@@ -4,6 +4,9 @@
   "private": true,
   "description": "Azure Functions backend for planned work-item storytelling",
   "main": "dist/index.js",
+  "engines": {
+    "node": "20.x"
+  },
   "scripts": {
     "build": "tsc -p tsconfig.json",
     "seed:stories": "npm run build && node dist/examples/seedStoriesExample.js",

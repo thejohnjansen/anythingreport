@@ -29,11 +29,12 @@ jobs:
           action: "upload"
           ###### Repository/Build Configurations ######
           # app_location: the folder containing your static web app files (index.html lives here)
-          app_location: "/"
+          app_location: "."
           # api_location: the folder containing your Azure Functions source
           api_location: "azure-functions-backend"
           # output_location: leave empty because this is a plain static site (no build step like React/Vue)
           output_location: ""
+          skip_app_build: true
           ###### End of Repository/Build Configurations ######
 
   close_pull_request_job:

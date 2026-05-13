@@ -4,7 +4,9 @@ const functions_1 = require("@azure/functions");
 const graphUploadService_1 = require("../graphUploadService");
 const pptService_1 = require("../pptService");
 const storyRepository_1 = require("../storyRepository");
-const repository = new storyRepository_1.StoryRepository();
+function createRepository() {
+    return new storyRepository_1.StoryRepository();
+}
 function json(body, init = {}) {
     return {
         status: init.status ?? 200,
@@ -34,9 +36,16 @@ functions_1.app.http('getStories', {
         if (!cycle) {
             return json({ error: 'Query string parameter cycle is required.' }, { status: 400 });
         }
-        context.log(`Fetching stories for cycle ${cycle}`);
-        const stories = await repository.getStoriesByCycle(cycle);
-        return json({ items: stories });
+        try {
+            context.log(`Fetching stories for cycle ${cycle}`);
+            const repository = createRepository();
+            const stories = await repository.getStoriesByCycle(cycle);
+            return json({ items: stories });
+        }
+        catch (error) {
+            const message = error instanceof Error ? error.message : 'Unknown error';
+            return json({ error: message }, { status: 500 });
+        }
     }
 });
 functions_1.app.http('postStory', {
@@ -44,9 +53,16 @@ functions_1.app.http('postStory', {
     route: 'stories',
     authLevel: 'anonymous',
     handler: async (request) => {
-        const body = await readJsonBody(request);
-        const story = await repository.upsertStory(body);
-        return json(story, { status: 201 });
+        try {
+            const body = await readJsonBody(request);
+            const repository = createRepository();
+            const story = await repository.upsertStory(body);
+            return json(story, { status: 201 });
+        }
+        catch (error) {
+            const message = error instanceof Error ? error.message : 'Unknown error';
+            return json({ error: message }, { status: 500 });
+        }
     }
 });
 functions_1.app.http('putStory', {
@@ -63,6 +79,7 @@ functions_1.app.http('putStory', {
             return json({ error: 'expectedVersion is required for concurrency-safe update.' }, { status: 400 });
         }
         try {
+            const repository = createRepository();
             const story = await repository.updateStoryWithConcurrencyCheck(id, body.expectedVersion, body);
             return json(story);
         }
@@ -96,6 +113,7 @@ functions_1.app.http('exportStoriesPpt', {
         const userId = getQueryValue(request, 'userId') ?? process.env.GRAPH_USER_ID;
         try {
             context.log(`Exporting stories to PPT for cycle ${cycle}`);
+            const repository = createRepository();
             const stories = await repository.getStoriesByCycle(cycle);
             if (stories.length === 0) {
                 return json({ error: `No stories found for cycle ${cycle}.` }, { status: 404 });

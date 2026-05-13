@@ -4,7 +4,9 @@ import { generatePpt } from '../pptService';
 import { StoryRepository } from '../storyRepository';
 import type { StoryUpdateRequest, StoryUpsertRequest } from '../types';
 
-const repository = new StoryRepository();
+function createRepository(): StoryRepository {
+  return new StoryRepository();
+}
 
 function json(body: unknown, init: Partial<HttpResponseInit> = {}): HttpResponseInit {
   return {
@@ -40,9 +42,15 @@ app.http('getStories', {
       return json({ error: 'Query string parameter cycle is required.' }, { status: 400 });
     }
 
-    context.log(`Fetching stories for cycle ${cycle}`);
-    const stories = await repository.getStoriesByCycle(cycle);
-    return json({ items: stories });
+    try {
+      context.log(`Fetching stories for cycle ${cycle}`);
+      const repository = createRepository();
+      const stories = await repository.getStoriesByCycle(cycle);
+      return json({ items: stories });
+    } catch (error) {
+      const message = error instanceof Error ? error.message : 'Unknown error';
+      return json({ error: message }, { status: 500 });
+    }
   }
 });
 
@@ -51,9 +59,15 @@ app.http('postStory', {
   route: 'stories',
   authLevel: 'anonymous',
   handler: async (request: HttpRequest): Promise<HttpResponseInit> => {
-    const body = await readJsonBody<StoryUpsertRequest>(request);
-    const story = await repository.upsertStory(body);
-    return json(story, { status: 201 });
+    try {
+      const body = await readJsonBody<StoryUpsertRequest>(request);
+      const repository = createRepository();
+      const story = await repository.upsertStory(body);
+      return json(story, { status: 201 });
+    } catch (error) {
+      const message = error instanceof Error ? error.message : 'Unknown error';
+      return json({ error: message }, { status: 500 });
+    }
   }
 });
 
@@ -73,6 +87,7 @@ app.http('putStory', {
     }
 
     try {
+      const repository = createRepository();
       const story = await repository.updateStoryWithConcurrencyCheck(id, body.expectedVersion, body);
       return json(story);
     } catch (error) {
@@ -109,6 +124,7 @@ app.http('exportStoriesPpt', {
 
     try {
       context.log(`Exporting stories to PPT for cycle ${cycle}`);
+      const repository = createRepository();
       const stories = await repository.getStoriesByCycle(cycle);
       if (stories.length === 0) {
         return json({ error: `No stories found for cycle ${cycle}.` }, { status: 404 });

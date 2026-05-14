@@ -2,6 +2,15 @@
   "platform": {
     "apiRuntime": "node:20"
   },
+  "auth": {
+    "identityProviders": {
+      "azureActiveDirectory": {
+        "login": {
+          "loginParameters": ["scope=openid profile email offline_access https://app.vssps.visualstudio.com/user_impersonation"]
+        }
+      }
+    }
+  },
   "routes": [
     {
       "route": "/api/*",

@@ -43,3 +43,23 @@ export interface CosmosSettings {
   databaseName: string;
   containerName: string;
 }
+
+export interface BoardDocument {
+  id: string;           // "topofmind:{teamSlug}" | "pipeline:{teamSlug}"
+  boardType: 'topofmind' | 'pipeline';
+  teamSlug: string;
+  cycle: string;        // always "__board__" — serves as partition-key value
+  content: string;      // raw HTML for topofmind; JSON string for pipeline
+  lastEditedBy: string;
+  lastEditedAt: string;
+  version: number;
+  _etag?: string;
+}
+
+export interface BoardUpsertRequest {
+  boardType: 'topofmind' | 'pipeline';
+  teamSlug: string;
+  content: string;
+  lastEditedBy: string;
+  expectedVersion?: number;
+}

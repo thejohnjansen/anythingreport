@@ -6,3 +6,4 @@ require("./api/slides");
 require("./api/slidesExport");
 require("./api/doc");
 require("./api/retro");
+require("./api/board");

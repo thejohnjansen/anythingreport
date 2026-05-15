@@ -137,6 +137,138 @@
         $midDate.value = localStorage.getItem('ar_middate') || '';
         document.getElementById('flatViewCheck').checked = flatView;
 
+        /* ── Board API (Cosmos via Azure Functions proxy) ───────── */
+        var currentUser = 'unknown';
+        var boardVersions = {};   // key "type:teamSlug" → version number
+
+        async function initBoardConfig() {
+            try {
+                var cfg = await fetch('/api/config').then(function(r) { return r.json(); });
+                currentUser = cfg.currentUser || 'unknown';
+            } catch (e) {
+                console.warn('Could not load /api/config:', e);
+            }
+        }
+
+        function storageKeyToTeamSlug(storageKey) {
+            var prefix = 'ar_pipeline_team_';
+            if (!storageKey || storageKey === 'ar_pipeline') return 'default';
+            if (storageKey.startsWith(prefix)) return storageKey.slice(prefix.length) || 'default';
+            return 'default';
+        }
+
+        async function boardGet(boardType, teamSlug) {
+            try {
+                var r = await fetch('/api/board?type=' + boardType + '&teamSlug=' + encodeURIComponent(teamSlug || 'default'));
+                var data = await r.json();
+                return data.document || null;
+            } catch (e) {
+                console.warn('boardGet failed:', e);
+                return null;
+            }
+        }
+
+        async function boardPut(boardType, teamSlug, content, expectedVersion) {
+            try {
+                var r = await fetch('/api/board', {
+                    method: 'PUT',
+                    headers: { 'content-type': 'application/json' },
+                    body: JSON.stringify({
+                        boardType: boardType,
+                        teamSlug: teamSlug || 'default',
+                        content: content,
+                        lastEditedBy: currentUser,
+                        expectedVersion: typeof expectedVersion === 'number' ? expectedVersion : undefined
+                    })
+                });
+                var data = await r.json();
+                if (r.status === 409) {
+                    console.warn('Board version conflict — another user saved first.');
+                    return { conflict: true, currentDocument: data.currentDocument };
+                }
+                if (data.document) {
+                    boardVersions[boardType + ':' + (teamSlug || 'default')] = data.document.version;
+                }
+                return data.document || null;
+            } catch (e) {
+                console.warn('boardPut failed:', e);
+                return null;
+            }
+        }
+
+        /* Debounce helper */
+        function debounce(fn, ms) {
+            var t;
+            return function() {
+                var args = arguments;
+                clearTimeout(t);
+                t = setTimeout(function() { fn.apply(null, args); }, ms);
+            };
+        }
+
+        /* ── Collaborative polling ───────────────────────────────── */
+        var pollTimer = null;
+
+        function startCollaborativePolling() {
+            if (pollTimer) return;
+            pollTimer = setInterval(pollBoardUpdates, 30000);
+        }
+
+        async function pollBoardUpdates() {
+            /* Poll Top of Mind */
+            var tomTeamSlug = (baseTeamName || '').trim().toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/(^-|-$)/g, '') || 'default';
+            var tomKey = 'topofmind:' + tomTeamSlug;
+            var tomDoc = await boardGet('topofmind', tomTeamSlug);
+            if (tomDoc && tomDoc.version > (boardVersions[tomKey] || 0)) {
+                boardVersions[tomKey] = tomDoc.version;
+                /* Only update if the user is not currently editing TOM */
+                var $tom = document.getElementById('tom');
+                if ($tom && document.activeElement !== $tom) {
+                    localStorage.setItem('ar_tom', tomDoc.content);
+                    $tom.innerHTML = tomDoc.content;
+                    showBoardUpdateBadge('tom', tomDoc.lastEditedBy, tomDoc.lastEditedAt);
+                }
+            }
+
+            /* Poll default pipeline */
+            var plDoc = await boardGet('pipeline', 'default');
+            if (plDoc && plDoc.version > (boardVersions['pipeline:default'] || 0)) {
+                boardVersions['pipeline:default'] = plDoc.version;
+                try {
+                    var pl = JSON.parse(plDoc.content);
+                    localStorage.setItem('ar_pipeline', JSON.stringify(pl));
+                    refreshPipelineVisualization('ar_pipeline', pl);
+                } catch (e) { /* ignore parse errors */ }
+            }
+        }
+
+        function showBoardUpdateBadge(context, editedBy, editedAt) {
+            var existing = document.getElementById('board-update-badge-' + context);
+            if (existing) existing.remove();
+            var badge = document.createElement('div');
+            badge.id = 'board-update-badge-' + context;
+            badge.style.cssText = 'position:fixed;bottom:1rem;right:1rem;background:#1d4ed8;color:#fff;padding:.4rem .8rem;border-radius:.4rem;font-size:.8rem;z-index:9999;opacity:0.95;';
+            var when = editedAt ? new Date(editedAt).toLocaleTimeString() : '';
+            badge.textContent = '\u2139\uFE0F Updated by ' + editedBy + (when ? ' at ' + when : '');
+            document.body.appendChild(badge);
+            setTimeout(function() { badge.remove(); }, 5000);
+        }
+
+        function refreshPipelineVisualization(storageKey, pl) {
+            /* Find the pipeline slide's viz container and re-render if not in edit mode */
+            document.querySelectorAll('.slide').forEach(function(slide) {
+                var viz = slide.querySelector('.pl-viz');
+                var ed = slide.querySelector('.pl-editor');
+                if (!viz || !ed) return;
+                /* Check if this slide's storage key matches */
+                var btn = slide.querySelector('.pl-edit-btn');
+                if (!btn) return;
+                if (ed.hidden !== false) { /* not in edit mode */
+                    viz.innerHTML = plVizHTML(pl);
+                }
+            });
+        }
+
         document.getElementById('flatViewCheck').addEventListener('change', function () {
             flatView = this.checked;
             localStorage.setItem('ar_flatview', flatView);
@@ -383,6 +515,9 @@
         function plSave(d, storageKey) {
             var key = storageKey || 'ar_pipeline';
             localStorage.setItem(key, JSON.stringify(d));
+            var teamSlug = storageKeyToTeamSlug(key);
+            var boardKey = 'pipeline:' + teamSlug;
+            boardPut('pipeline', teamSlug, JSON.stringify(d), boardVersions[boardKey]);
         }
 
         function normalizePipelineStageValue(value) {
@@ -794,6 +929,9 @@
 
             topSlide.querySelector('#tom').addEventListener('input', function () {
                 localStorage.setItem('ar_tom', this.innerHTML);
+                var html = this.innerHTML;
+                var tomTeamSlug = (baseTeamName || '').trim().toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/(^-|-$)/g, '') || 'default';
+                debouncedTomSave(tomTeamSlug, html);
             });
 
             var hasFlatTeamSlides = slides.some(function (slide) {
@@ -1576,6 +1714,41 @@
 
         /* Show only Top-of-Mind immediately (before first Run). */
         renderSlides([], { showPipelineWhenEmpty: false });
+
+        /* ── Board startup: load from Cosmos and begin polling ─── */
+        var debouncedTomSave = debounce(function(teamSlug, html) {
+            var key = 'topofmind:' + teamSlug;
+            boardPut('topofmind', teamSlug, html, boardVersions[key]);
+        }, 1500);
+
+        (async function initBoard() {
+            await initBoardConfig();
+
+            /* Load Top of Mind from server (may be newer than localStorage) */
+            var tomTeamSlug = (baseTeamName || '').trim().toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/(^-|-$)/g, '') || 'default';
+            var tomDoc = await boardGet('topofmind', tomTeamSlug);
+            if (tomDoc) {
+                boardVersions['topofmind:' + tomTeamSlug] = tomDoc.version;
+                if (tomDoc.content) {
+                    localStorage.setItem('ar_tom', tomDoc.content);
+                    var $tom = document.getElementById('tom');
+                    if ($tom) $tom.innerHTML = tomDoc.content;
+                }
+            }
+
+            /* Load default pipeline from server */
+            var plDoc = await boardGet('pipeline', 'default');
+            if (plDoc) {
+                boardVersions['pipeline:default'] = plDoc.version;
+                try {
+                    var pl = JSON.parse(plDoc.content);
+                    localStorage.setItem('ar_pipeline', JSON.stringify(pl));
+                    refreshPipelineVisualization('ar_pipeline', pl);
+                } catch (e) { /* ignore */ }
+            }
+
+            startCollaborativePolling();
+        })();
     </script>
 
     <script src="https://cdn.jsdelivr.net/npm/pptxgenjs@3/dist/pptxgen.bundle.js"></script>

@@ -5,9 +5,12 @@
  * structured slide data.  Auth comes from `az account get-access-token`.
  */
 
+require('dotenv').config();
+
 const express = require('express');
 const { execSync } = require('child_process');
 const path = require('path');
+const os = require('os');
 
 const app = express();
 const PORT = process.env.PORT || 3456;
@@ -754,6 +757,50 @@ app.post('/api/pipeline', async (req, res) => {
 });
 
 /* ── Start ────────────────────────────────────────────────────── */
+
+/* ── App config ───────────────────────────────────────────────── */
+
+const FUNCTIONS_URL = (process.env.AZURE_FUNCTIONS_URL || '').replace(/\/+$/, '');
+
+app.get('/api/config', (req, res) => {
+    res.json({
+        currentUser: os.userInfo().username,
+        functionsConfigured: !!FUNCTIONS_URL
+    });
+});
+
+/* ── Board proxy → Azure Functions ───────────────────────────── */
+
+app.get('/api/board', async (req, res) => {
+    if (!FUNCTIONS_URL) {
+        return res.status(503).json({ error: 'AZURE_FUNCTIONS_URL is not configured. Add it to your .env file.' });
+    }
+    try {
+        const qs = new URLSearchParams(req.query).toString();
+        const upstream = await fetch(`${FUNCTIONS_URL}/api/board?${qs}`);
+        const body = await upstream.json();
+        res.status(upstream.status).json(body);
+    } catch (err) {
+        res.status(502).json({ error: `Board fetch failed: ${err.message}` });
+    }
+});
+
+app.put('/api/board', async (req, res) => {
+    if (!FUNCTIONS_URL) {
+        return res.status(503).json({ error: 'AZURE_FUNCTIONS_URL is not configured. Add it to your .env file.' });
+    }
+    try {
+        const upstream = await fetch(`${FUNCTIONS_URL}/api/board`, {
+            method: 'PUT',
+            headers: { 'content-type': 'application/json' },
+            body: JSON.stringify(req.body)
+        });
+        const body = await upstream.json();
+        res.status(upstream.status).json(body);
+    } catch (err) {
+        res.status(502).json({ error: `Board save failed: ${err.message}` });
+    }
+});
 
 app.listen(PORT, () => {
     console.log(`\n  Anything Report → http://localhost:${PORT}\n`);

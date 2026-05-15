@@ -21,6 +21,19 @@ const http = require('http');
  * @returns {Promise<{ port: number, close: () => void }>}
  */
 function startTokenServer(getToken) {
+    // Cache the token in-process so we only call getToken() (which may trigger
+    // an interactive browser flow) once. Expire 5 minutes before the actual
+    // token expiry to give some headroom for clock skew.
+    const CACHE_MS = 55 * 60 * 1000; // 55 minutes
+    let cache = { token: null, expiry: 0 };
+
+    async function getCachedToken() {
+        if (cache.token && Date.now() < cache.expiry) return cache.token;
+        const token = await getToken();
+        cache = { token, expiry: Date.now() + CACHE_MS };
+        return token;
+    }
+
     return new Promise((resolve, reject) => {
         const server = http.createServer(async (req, res) => {
             // Only serve the /token route
@@ -42,7 +55,7 @@ function startTokenServer(getToken) {
             }
 
             try {
-                const token = await getToken();
+                const token = await getCachedToken();
                 res.writeHead(200, { 'Content-Type': 'application/json' });
                 res.end(JSON.stringify({ token }));
             } catch (err) {

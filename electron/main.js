@@ -206,9 +206,13 @@ app.whenReady().then(async () => {
         }
 
         try {
-            // Warm up the token now — this triggers interactive sign-in if needed,
+            // Warm up the token now — call the token server so its in-memory
+            // cache is pre-populated. This triggers interactive sign-in if needed,
             // or silently refreshes an expired token from the cache.
-            await getAccessToken();
+            // All subsequent calls from server.js will hit the warm cache instantly.
+            const warmupRes = await fetch(`http://127.0.0.1:${tokenServerHandle.port}/token`);
+            const warmupData = await warmupRes.json();
+            if (!warmupRes.ok) throw new Error(warmupData.error || 'Token warmup failed');
         } catch (err) {
             await updateSplash(splash, '&#x274C;', 'Sign-in failed.',
                 err.message.replace(/</g, '&lt;'));

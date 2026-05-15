@@ -2,11 +2,11 @@
 
 require('dotenv').config({ path: require('path').join(__dirname, '..', '.env') });
 
-const { app, BrowserWindow, shell } = require('electron');
+const { app, BrowserWindow, shell, Menu } = require('electron');
 const path = require('path');
 const { spawn } = require('child_process');
 const http = require('http');
-const { getAccessToken, hasCachedAccount } = require('./msalAuth');
+const { getAccessToken, hasCachedAccount, signOut } = require('./msalAuth');
 const { startTokenServer } = require('./tokenServer');
 
 const SERVER_PORT = process.env.PORT || 3456;
@@ -222,6 +222,24 @@ app.whenReady().then(async () => {
 
     splash.close();
     createWindow();
+
+    if (useMsal) {
+        Menu.setApplicationMenu(Menu.buildFromTemplate([
+            {
+                label: 'Account',
+                submenu: [
+                    {
+                        label: 'Sign Out',
+                        click: async () => {
+                            await signOut();
+                            app.relaunch();
+                            app.quit();
+                        }
+                    }
+                ]
+            }
+        ]));
+    }
 });
 
 app.on('window-all-closed', () => {

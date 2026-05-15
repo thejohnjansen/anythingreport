@@ -140,4 +140,21 @@ async function hasCachedAccount() {
     }
 }
 
-module.exports = { getAccessToken, hasCachedAccount };
+/**
+ * Removes all cached accounts from MSAL and deletes the on-disk token cache,
+ * forcing a fresh interactive sign-in on the next launch.
+ */
+async function signOut() {
+    try {
+        const client = getClient();
+        const accounts = await client.getAllAccounts();
+        for (const account of accounts) {
+            await client.removeAccount(account);
+        }
+    } catch { /* ignore */ }
+    try {
+        if (fs.existsSync(CACHE_FILE)) fs.unlinkSync(CACHE_FILE);
+    } catch { /* non-fatal */ }
+}
+
+module.exports = { getAccessToken, hasCachedAccount, signOut };

@@ -68,7 +68,6 @@ function createSplashWindow() {
         frame: false,
         resizable: false,
         center: true,
-        alwaysOnTop: true,
         webPreferences: { nodeIntegration: false, contextIsolation: false }
     });
 

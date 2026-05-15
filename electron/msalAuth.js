@@ -92,6 +92,8 @@ async function getAccessToken() {
 
     // Interactive: MSAL starts a loopback server, calls openBrowser with the auth URL,
     // then waits for the redirect to capture the authorization code automatically.
+    // We must use shell.openExternal (the real system browser) — Microsoft actively
+    // blocks auth in embedded WebViews regardless of user-agent spoofing.
     const result = await client.acquireTokenInteractive({
         scopes: SCOPES,
         openBrowser: async (url) => { await shell.openExternal(url); },

@@ -1,5 +1,7 @@
 'use strict';
 
+require('dotenv').config({ path: require('path').join(__dirname, '..', '.env') });
+
 const { app, BrowserWindow, shell } = require('electron');
 const path = require('path');
 const { spawn } = require('child_process');
@@ -14,9 +16,11 @@ let mainWindow = null;
 /* ── Start Express server as child process ── */
 function startServer(msalTokenPort) {
     const serverPath = path.join(__dirname, '..', 'server.js');
+    const env = { ...process.env };
+    if (msalTokenPort) env.MSAL_TOKEN_PORT = String(msalTokenPort);
     serverProcess = spawn(process.execPath, [serverPath], {
         cwd: path.join(__dirname, '..'),
-        env: { ...process.env, MSAL_TOKEN_PORT: String(msalTokenPort) },
+        env,
         stdio: ['ignore', 'pipe', 'pipe']
     });
 
@@ -161,21 +165,25 @@ app.whenReady().then(async () => {
     const splash = createSplashWindow();
     await new Promise((resolve) => splash.webContents.once('did-finish-load', resolve));
 
+    const useMsal = !!process.env.AZURE_CLIENT_ID;
+
     // Start the MSAL token server before the Express server so the port is
     // available as an env var when the Express process starts.
     let tokenServerHandle;
-    try {
-        await updateSplash(splash, '&#x1F510;', 'Initialising authentication&hellip;');
-        tokenServerHandle = await startTokenServer(getAccessToken);
-    } catch (err) {
-        await updateSplash(splash, '&#x274C;', 'Authentication setup failed.',
-            err.message.replace(/</g, '&lt;'));
-        setTimeout(() => app.quit(), 8000);
-        return;
+    if (useMsal) {
+        try {
+            await updateSplash(splash, '&#x1F510;', 'Initialising authentication&hellip;');
+            tokenServerHandle = await startTokenServer(getAccessToken);
+        } catch (err) {
+            await updateSplash(splash, '&#x274C;', 'Authentication setup failed.',
+                err.message.replace(/</g, '&lt;'));
+            setTimeout(() => app.quit(), 8000);
+            return;
+        }
     }
 
     await updateSplash(splash, '&#x23F3;', 'Starting server&hellip;');
-    startServer(tokenServerHandle.port);
+    startServer(tokenServerHandle ? tokenServerHandle.port : null);
 
     try {
         await waitForServer();
@@ -186,25 +194,27 @@ app.whenReady().then(async () => {
         return;
     }
 
-    // If there is no cached account, we know interactive sign-in is needed.
-    // Otherwise getAccessToken() will silently refresh in the background.
-    const cached = await hasCachedAccount();
-    if (!cached) {
-        await updateSplash(splash, '&#x1F511;', 'Sign in to your Microsoft account',
-            'A browser window has opened &mdash; complete sign-in there, then return here.');
-    } else {
-        await updateSplash(splash, '&#x1F510;', 'Verifying sign-in&hellip;');
-    }
+    if (useMsal) {
+        // If there is no cached account, we know interactive sign-in is needed.
+        // Otherwise getAccessToken() will silently refresh in the background.
+        const cached = await hasCachedAccount();
+        if (!cached) {
+            await updateSplash(splash, '&#x1F511;', 'Sign in to your Microsoft account',
+                'A browser window has opened &mdash; complete sign-in there, then return here.');
+        } else {
+            await updateSplash(splash, '&#x1F510;', 'Verifying sign-in&hellip;');
+        }
 
-    try {
-        // Warm up the token now — this triggers interactive sign-in if needed,
-        // or silently refreshes an expired token from the cache.
-        await getAccessToken();
-    } catch (err) {
-        await updateSplash(splash, '&#x274C;', 'Sign-in failed.',
-            err.message.replace(/</g, '&lt;'));
-        setTimeout(() => app.quit(), 8000);
-        return;
+        try {
+            // Warm up the token now — this triggers interactive sign-in if needed,
+            // or silently refreshes an expired token from the cache.
+            await getAccessToken();
+        } catch (err) {
+            await updateSplash(splash, '&#x274C;', 'Sign-in failed.',
+                err.message.replace(/</g, '&lt;'));
+            setTimeout(() => app.quit(), 8000);
+            return;
+        }
     }
 
     splash.close();

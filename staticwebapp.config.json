@@ -13,6 +13,10 @@
   },
   "routes": [
     {
+      "route": "/api/board",
+      "allowedRoles": ["anonymous"]
+    },
+    {
       "route": "/api/*",
       "allowedRoles": ["authenticated"]
     },

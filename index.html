@@ -1655,12 +1655,11 @@
                     var newTomDoc = await boardGet('topofmind', newTeamSlug);
                     if (newTomDoc) {
                         boardVersions['topofmind:' + newTeamSlug] = newTomDoc.version;
-                        if (newTomDoc.content) {
-                            localStorage.setItem('ar_tom', newTomDoc.content);
-                            var $tom = document.getElementById('tom');
-                            if ($tom) $tom.innerHTML = newTomDoc.content;
-                        }
                     }
+                    var newTomContent = (newTomDoc && newTomDoc.content) || '';
+                    localStorage.setItem('ar_tom', newTomContent);
+                    var $tom = document.getElementById('tom');
+                    if ($tom) $tom.innerHTML = newTomContent;
                     var newPlDoc = await boardGet('pipeline', newTeamSlug);
                     if (newPlDoc) {
                         boardVersions['pipeline:' + newTeamSlug] = newPlDoc.version;

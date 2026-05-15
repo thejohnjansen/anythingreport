@@ -1385,10 +1385,6 @@
                 return window.__arApiConfig.baseUrl.replace(/\/+$/, '');
             }
 
-            if (location.hostname === 'localhost' && location.port === '3456') {
-                return 'http://localhost:7071/api';
-            }
-
             return '/api';
         }
 

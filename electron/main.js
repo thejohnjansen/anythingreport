@@ -35,8 +35,8 @@ function waitForServer(maxAttempts = 40) {
         let attempts = 0;
 
         function attempt() {
-            const req = http.get(`http://localhost:${SERVER_PORT}/api/config`, (res) => {
-                res.resume(); // drain the response
+            const req = http.get(`http://localhost:${SERVER_PORT}/api/ping`, (res) => {
+                res.resume();
                 resolve();
             });
             req.setTimeout(800, () => req.destroy());
@@ -51,6 +51,50 @@ function waitForServer(maxAttempts = 40) {
         }
 
         attempt();
+    });
+}
+
+/* ── Tiny frameless status window ── */
+function createStatusWindow(message) {
+    const win = new BrowserWindow({
+        width: 460,
+        height: 140,
+        frame: false,
+        resizable: false,
+        center: true,
+        alwaysOnTop: true,
+        webPreferences: { nodeIntegration: false, contextIsolation: true }
+    });
+
+    const html = `<!DOCTYPE html><html><body style="margin:0;display:flex;flex-direction:column;align-items:center;justify-content:center;height:100vh;font-family:'Segoe UI',system-ui,sans-serif;background:#0f172a;color:#e2e8f0;font-size:14px;gap:.6rem;"><div style="font-size:1.5rem;">&#128274;</div><div>${message}</div></body></html>`;
+    win.loadURL(`data:text/html;charset=utf-8,${encodeURIComponent(html)}`);
+    return win;
+}
+
+/* ── Check Azure CLI auth via the server endpoint ── */
+async function checkAuth() {
+    try {
+        const res = await fetch(`http://localhost:${SERVER_PORT}/api/auth/status`);
+        const data = await res.json();
+        return data.authenticated === true;
+    } catch {
+        return false;
+    }
+}
+
+/* ── Run az login (opens the default browser) ── */
+function runAzLogin() {
+    return new Promise((resolve, reject) => {
+        const proc = spawn('az', ['login'], {
+            shell: true,
+            stdio: 'pipe',       // suppress console noise in the packaged app
+            windowsHide: true    // no extra CMD window on Windows
+        });
+        proc.on('exit', (code) => {
+            if (code === 0) resolve();
+            else reject(new Error(`az login exited with code ${code}`));
+        });
+        proc.on('error', (err) => reject(err));
     });
 }
 
@@ -85,21 +129,47 @@ function createWindow() {
         }
     });
 
-    mainWindow.on('closed', () => {
-        mainWindow = null;
-    });
+    mainWindow.on('closed', () => { mainWindow = null; });
 }
 
 /* ── App lifecycle ── */
 app.whenReady().then(async () => {
     startServer();
+
     try {
         await waitForServer();
-        createWindow();
     } catch (err) {
         console.error('Fatal: could not start server —', err.message);
         app.quit();
+        return;
     }
+
+    const authenticated = await checkAuth();
+
+    if (!authenticated) {
+        const statusWin = createStatusWindow('Opening Azure sign-in in your browser&hellip;');
+
+        try {
+            await runAzLogin();
+        } catch (err) {
+            statusWin.close();
+            const errWin = createStatusWindow('Sign-in failed. Run <code>az login</code> and restart.');
+            setTimeout(() => app.quit(), 6000);
+            return;
+        }
+
+        // Verify login succeeded
+        const nowAuthenticated = await checkAuth();
+        statusWin.close();
+
+        if (!nowAuthenticated) {
+            const errWin = createStatusWindow('Sign-in did not complete. Run <code>az login</code> and restart.');
+            setTimeout(() => app.quit(), 6000);
+            return;
+        }
+    }
+
+    createWindow();
 });
 
 app.on('window-all-closed', () => {
@@ -111,7 +181,5 @@ app.on('window-all-closed', () => {
 });
 
 app.on('activate', () => {
-    if (mainWindow === null) {
-        createWindow();
-    }
+    if (mainWindow === null) createWindow();
 });

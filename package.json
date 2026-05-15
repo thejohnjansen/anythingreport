@@ -7,6 +7,7 @@
     "start": "node server.js",
     "electron": "electron .",
     "electron:dev": "electron . --inspect",
+    "dist": "electron-builder --win",
     "build": "echo \"No build required\"",
     "build:azure": "echo \"No build required\""
   },
@@ -17,5 +18,25 @@
   "devDependencies": {
     "electron": "^31.0.0",
     "electron-builder": "^24.13.3"
+  },
+  "build": {
+    "appId": "com.anythingReport",
+    "productName": "Anything Report",
+    "files": [
+      "electron/**/*",
+      "server.js",
+      "index.html",
+      "styles.css",
+      "pptx-export.js",
+      "staticwebapp.config.json",
+      "package.json"
+    ],
+    "directories": {
+      "output": "dist"
+    },
+    "win": {
+      "target": "nsis",
+      "icon": "electron/icon.ico"
+    }
   }
 }

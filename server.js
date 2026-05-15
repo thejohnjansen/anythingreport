@@ -769,6 +769,26 @@ app.get('/api/config', (req, res) => {
     });
 });
 
+/* ── Health ping (fast, no external calls) ───────────────────── */
+
+app.get('/api/ping', (_req, res) => res.json({ ok: true }));
+
+/* ── Azure CLI auth status ────────────────────────────────────── */
+
+app.get('/api/auth/status', (req, res) => {
+    try {
+        const json = execSync('az account show', { encoding: 'utf8', timeout: 10_000 });
+        const acct = JSON.parse(json);
+        res.json({
+            authenticated: true,
+            user: acct.user?.name || '',
+            subscription: acct.name || ''
+        });
+    } catch {
+        res.json({ authenticated: false });
+    }
+});
+
 /* ── Board proxy → Azure Functions ───────────────────────────── */
 
 app.get('/api/board', async (req, res) => {

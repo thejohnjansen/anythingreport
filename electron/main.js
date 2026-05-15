@@ -4,17 +4,19 @@ const { app, BrowserWindow, shell } = require('electron');
 const path = require('path');
 const { spawn } = require('child_process');
 const http = require('http');
+const { getAccessToken, hasCachedAccount } = require('./msalAuth');
+const { startTokenServer } = require('./tokenServer');
 
 const SERVER_PORT = process.env.PORT || 3456;
 let serverProcess = null;
 let mainWindow = null;
 
 /* ── Start Express server as child process ── */
-function startServer() {
+function startServer(msalTokenPort) {
     const serverPath = path.join(__dirname, '..', 'server.js');
     serverProcess = spawn(process.execPath, [serverPath], {
         cwd: path.join(__dirname, '..'),
-        env: { ...process.env },
+        env: { ...process.env, MSAL_TOKEN_PORT: String(msalTokenPort) },
         stdio: ['ignore', 'pipe', 'pipe']
     });
 
@@ -54,48 +56,70 @@ function waitForServer(maxAttempts = 40) {
     });
 }
 
-/* ── Tiny frameless status window ── */
-function createStatusWindow(message) {
+/* ── Splash / status window (single instance, content updated in-place) ── */
+function createSplashWindow() {
     const win = new BrowserWindow({
-        width: 460,
-        height: 140,
+        width: 520,
+        height: 260,
         frame: false,
         resizable: false,
         center: true,
         alwaysOnTop: true,
-        webPreferences: { nodeIntegration: false, contextIsolation: true }
+        webPreferences: { nodeIntegration: false, contextIsolation: false }
     });
 
-    const html = `<!DOCTYPE html><html><body style="margin:0;display:flex;flex-direction:column;align-items:center;justify-content:center;height:100vh;font-family:'Segoe UI',system-ui,sans-serif;background:#0f172a;color:#e2e8f0;font-size:14px;gap:.6rem;"><div style="font-size:1.5rem;">&#128274;</div><div>${message}</div></body></html>`;
+    const html = `<!DOCTYPE html>
+<html>
+<head>
+<meta charset="utf-8">
+<style>
+  * { box-sizing: border-box; margin: 0; padding: 0; }
+  body {
+    height: 100vh;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    gap: .75rem;
+    font-family: 'Segoe UI', system-ui, sans-serif;
+    background: #0f172a;
+    color: #e2e8f0;
+    padding: 2rem;
+    text-align: center;
+  }
+  #app-name { font-size: 1.1rem; font-weight: 600; color: #94a3b8; letter-spacing: .05em; }
+  #icon     { font-size: 2.2rem; line-height: 1; }
+  #message  { font-size: 1rem; font-weight: 500; }
+  #detail   { font-size: .8rem; color: #94a3b8; max-width: 400px; line-height: 1.5; }
+  a         { color: #60a5fa; }
+  code      { font-family: 'Cascadia Code', Consolas, monospace; background: #1e293b;
+              padding: .1em .35em; border-radius: 4px; }
+</style>
+</head>
+<body>
+  <div id="app-name">ANYTHING REPORT</div>
+  <div id="icon">&#x23F3;</div>
+  <div id="message">Starting&hellip;</div>
+  <div id="detail"></div>
+  <script>
+    function update(icon, message, detail) {
+      document.getElementById('icon').innerHTML    = icon;
+      document.getElementById('message').innerHTML = message;
+      document.getElementById('detail').innerHTML  = detail || '';
+    }
+  </script>
+</body>
+</html>`;
+
     win.loadURL(`data:text/html;charset=utf-8,${encodeURIComponent(html)}`);
     return win;
 }
 
-/* ── Check Azure CLI auth via the server endpoint ── */
-async function checkAuth() {
-    try {
-        const res = await fetch(`http://localhost:${SERVER_PORT}/api/auth/status`);
-        const data = await res.json();
-        return data.authenticated === true;
-    } catch {
-        return false;
-    }
-}
-
-/* ── Run az login (opens the default browser) ── */
-function runAzLogin() {
-    return new Promise((resolve, reject) => {
-        const proc = spawn('az', ['login'], {
-            shell: true,
-            stdio: 'pipe',       // suppress console noise in the packaged app
-            windowsHide: true    // no extra CMD window on Windows
-        });
-        proc.on('exit', (code) => {
-            if (code === 0) resolve();
-            else reject(new Error(`az login exited with code ${code}`));
-        });
-        proc.on('error', (err) => reject(err));
-    });
+/* ── Update splash content ── */
+function updateSplash(win, icon, message, detail = '') {
+    return win.webContents.executeJavaScript(
+        `update(${JSON.stringify(icon)}, ${JSON.stringify(message)}, ${JSON.stringify(detail)})`
+    );
 }
 
 /* ── Create the main window ── */
@@ -113,7 +137,6 @@ function createWindow() {
 
     mainWindow.loadURL(`http://localhost:${SERVER_PORT}`);
 
-    // Open external URLs (e.g. ADO links) in the default browser
     mainWindow.webContents.setWindowOpenHandler(({ url }) => {
         if (url.startsWith('http://') || url.startsWith('https://')) {
             shell.openExternal(url);
@@ -134,41 +157,57 @@ function createWindow() {
 
 /* ── App lifecycle ── */
 app.whenReady().then(async () => {
-    startServer();
+    // Show splash immediately so users see something right away
+    const splash = createSplashWindow();
+    await new Promise((resolve) => splash.webContents.once('did-finish-load', resolve));
+
+    // Start the MSAL token server before the Express server so the port is
+    // available as an env var when the Express process starts.
+    let tokenServerHandle;
+    try {
+        await updateSplash(splash, '&#x1F510;', 'Initialising authentication&hellip;');
+        tokenServerHandle = await startTokenServer(getAccessToken);
+    } catch (err) {
+        await updateSplash(splash, '&#x274C;', 'Authentication setup failed.',
+            err.message.replace(/</g, '&lt;'));
+        setTimeout(() => app.quit(), 8000);
+        return;
+    }
+
+    await updateSplash(splash, '&#x23F3;', 'Starting server&hellip;');
+    startServer(tokenServerHandle.port);
 
     try {
         await waitForServer();
     } catch (err) {
-        console.error('Fatal: could not start server —', err.message);
-        app.quit();
+        await updateSplash(splash, '&#x274C;', 'Could not start the server.',
+            'Please try restarting the app. If the problem persists, reinstall.');
+        setTimeout(() => app.quit(), 8000);
         return;
     }
 
-    const authenticated = await checkAuth();
-
-    if (!authenticated) {
-        const statusWin = createStatusWindow('Opening Azure sign-in in your browser&hellip;');
-
-        try {
-            await runAzLogin();
-        } catch (err) {
-            statusWin.close();
-            const errWin = createStatusWindow('Sign-in failed. Run <code>az login</code> and restart.');
-            setTimeout(() => app.quit(), 6000);
-            return;
-        }
-
-        // Verify login succeeded
-        const nowAuthenticated = await checkAuth();
-        statusWin.close();
-
-        if (!nowAuthenticated) {
-            const errWin = createStatusWindow('Sign-in did not complete. Run <code>az login</code> and restart.');
-            setTimeout(() => app.quit(), 6000);
-            return;
-        }
+    // If there is no cached account, we know interactive sign-in is needed.
+    // Otherwise getAccessToken() will silently refresh in the background.
+    const cached = await hasCachedAccount();
+    if (!cached) {
+        await updateSplash(splash, '&#x1F511;', 'Sign in to your Microsoft account',
+            'A browser window has opened &mdash; complete sign-in there, then return here.');
+    } else {
+        await updateSplash(splash, '&#x1F510;', 'Verifying sign-in&hellip;');
     }
 
+    try {
+        // Warm up the token now — this triggers interactive sign-in if needed,
+        // or silently refreshes an expired token from the cache.
+        await getAccessToken();
+    } catch (err) {
+        await updateSplash(splash, '&#x274C;', 'Sign-in failed.',
+            err.message.replace(/</g, '&lt;'));
+        setTimeout(() => app.quit(), 8000);
+        return;
+    }
+
+    splash.close();
     createWindow();
 });
 

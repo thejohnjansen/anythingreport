@@ -22,8 +22,21 @@ app.use(express.static(__dirname));
 
 let tokenCache = { token: null, expiry: 0 };
 
-function getToken() {
+async function getToken() {
     if (tokenCache.token && Date.now() < tokenCache.expiry) return tokenCache.token;
+
+    // When running inside Electron, acquire the token from the MSAL token server
+    // that main.js started and passed via MSAL_TOKEN_PORT.
+    if (process.env.MSAL_TOKEN_PORT) {
+        const res  = await fetch(`http://127.0.0.1:${process.env.MSAL_TOKEN_PORT}/token`);
+        const data = await res.json();
+        if (!res.ok) throw new Error(`Token server error: ${data.error}`);
+        // Cache for 55 minutes (ADO tokens are valid for ~60 min)
+        tokenCache = { token: data.token, expiry: Date.now() + 55 * 60 * 1000 };
+        return tokenCache.token;
+    }
+
+    // Fallback: az CLI (for direct development use without Electron)
     const json = execSync(
         'az account get-access-token --resource 499b84ac-1321-427f-aa17-267ca6975798',
         { encoding: 'utf8', timeout: 30_000 }
@@ -477,7 +490,7 @@ app.post('/api/slides', async (req, res) => {
         if (!queryUrl) return res.status(400).json({ error: 'queryUrl is required' });
 
         const { baseUrl, project, queryId } = parseQueryUrl(queryUrl);
-        const token = getToken();
+        const token = await getToken();
 
         // 1. Run the tree query
         const queryResult = await runQuery(baseUrl, project, queryId, token);
@@ -585,7 +598,7 @@ app.post('/api/doc', async (req, res) => {
         if (!queryUrl) return res.status(400).json({ error: 'queryUrl is required' });
 
         const { baseUrl, project, queryId } = parseQueryUrl(queryUrl);
-        const token = getToken();
+        const token = await getToken();
 
         const queryResult = await runQuery(baseUrl, project, queryId, token);
 
@@ -697,7 +710,7 @@ app.post('/api/retro', async (req, res) => {
         if (!queryUrl) return res.status(400).json({ error: 'queryUrl is required' });
 
         const { baseUrl, project, queryId } = parseQueryUrl(queryUrl);
-        const token = getToken();
+        const token = await getToken();
 
         const queryResult = await runQuery(baseUrl, project, queryId, token);
 
@@ -723,7 +736,7 @@ app.post('/api/pipeline', async (req, res) => {
         if (!queryUrl) return res.status(400).json({ error: 'queryUrl is required' });
 
         const { baseUrl, project, queryId } = parseQueryUrl(queryUrl);
-        const token = getToken();
+        const token = await getToken();
 
         const queryResult = await runQuery(baseUrl, project, queryId, token);
 
@@ -775,7 +788,18 @@ app.get('/api/ping', (_req, res) => res.json({ ok: true }));
 
 /* ── Azure CLI auth status ────────────────────────────────────── */
 
-app.get('/api/auth/status', (req, res) => {
+app.get('/api/auth/status', async (req, res) => {
+    // When running inside Electron, the MSAL token server is the source of truth.
+    if (process.env.MSAL_TOKEN_PORT) {
+        try {
+            const r = await fetch(`http://127.0.0.1:${process.env.MSAL_TOKEN_PORT}/token`);
+            const data = await r.json();
+            if (r.ok && data.token) return res.json({ authenticated: true });
+        } catch { /* fall through */ }
+        return res.json({ authenticated: false });
+    }
+
+    // Fallback for direct (non-Electron) use: check az CLI
     try {
         const json = execSync('az account show', { encoding: 'utf8', timeout: 10_000 });
         const acct = JSON.parse(json);

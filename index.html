@@ -112,7 +112,7 @@
         let lastSlides = null;              // cache for view switches
         let flatView = localStorage.getItem('ar_flatview') === 'true';
         let baseSlideTitle = 'Layout';
-        let baseTeamName = '';
+        let baseTeamName = localStorage.getItem('ar_team_name') || '';
         let deckFileName = 'anything-report';
 
         const $deck    = document.getElementById('deck');
@@ -150,9 +150,13 @@
             }
         }
 
+        function teamSlugFromName(name) {
+            return (name || '').trim().toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/(^-|-$)/g, '') || 'default';
+        }
+
         function storageKeyToTeamSlug(storageKey) {
             var prefix = 'ar_pipeline_team_';
-            if (!storageKey || storageKey === 'ar_pipeline') return 'default';
+            if (!storageKey || storageKey === 'ar_pipeline') return teamSlugFromName(baseTeamName);
             if (storageKey.startsWith(prefix)) return storageKey.slice(prefix.length) || 'default';
             return 'default';
         }
@@ -930,7 +934,7 @@
             topSlide.querySelector('#tom').addEventListener('input', function () {
                 localStorage.setItem('ar_tom', this.innerHTML);
                 var html = this.innerHTML;
-                var tomTeamSlug = (baseTeamName || '').trim().toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/(^-|-$)/g, '') || 'default';
+                var tomTeamSlug = teamSlugFromName(baseTeamName);
                 debouncedTomSave(tomTeamSlug, html);
             });
 
@@ -1635,13 +1639,38 @@
                 hasMidpoint = !!slideData.hasMidpoint;
                 lastSlides  = slideData.slides;
                 baseSlideTitle = slideData.baseSlideTitle || 'Layout';
+                var prevTeamSlug = teamSlugFromName(baseTeamName);
                 baseTeamName = slideData.baseTeamName || '';
+                if (baseTeamName) localStorage.setItem('ar_team_name', baseTeamName);
                 deckFileName = slideData.deckFileName || 'anything-report';
 
                 renderSlides(slideData.slides);
                 renderRetro(retroData.rows, retroData.linkBase || linkBase);
                 renderDoc(docData.sections, docData.linkBase || linkBase);
                 $pptxBtn.hidden = false;
+
+                /* If the team changed, reload pipeline and top-of-mind from Cosmos */
+                var newTeamSlug = teamSlugFromName(baseTeamName);
+                if (newTeamSlug !== prevTeamSlug) {
+                    var newTomDoc = await boardGet('topofmind', newTeamSlug);
+                    if (newTomDoc) {
+                        boardVersions['topofmind:' + newTeamSlug] = newTomDoc.version;
+                        if (newTomDoc.content) {
+                            localStorage.setItem('ar_tom', newTomDoc.content);
+                            var $tom = document.getElementById('tom');
+                            if ($tom) $tom.innerHTML = newTomDoc.content;
+                        }
+                    }
+                    var newPlDoc = await boardGet('pipeline', newTeamSlug);
+                    if (newPlDoc) {
+                        boardVersions['pipeline:' + newTeamSlug] = newPlDoc.version;
+                        try {
+                            var newPl = JSON.parse(newPlDoc.content);
+                            localStorage.setItem('ar_pipeline', JSON.stringify(newPl));
+                            refreshPipelineVisualization('ar_pipeline', newPl);
+                        } catch (e) { /* ignore */ }
+                    }
+                }
             } catch (err) {
                 alert('Error: ' + err.message);
             } finally {
@@ -1721,7 +1750,7 @@
             await initBoardConfig();
 
             /* Load Top of Mind from server (may be newer than localStorage) */
-            var tomTeamSlug = (baseTeamName || '').trim().toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/(^-|-$)/g, '') || 'default';
+            var tomTeamSlug = teamSlugFromName(baseTeamName);
             var tomDoc = await boardGet('topofmind', tomTeamSlug);
             if (tomDoc) {
                 boardVersions['topofmind:' + tomTeamSlug] = tomDoc.version;
@@ -1732,10 +1761,11 @@
                 }
             }
 
-            /* Load default pipeline from server */
-            var plDoc = await boardGet('pipeline', 'default');
+            /* Load pipeline from server using team-scoped slug */
+            var plTeamSlug = teamSlugFromName(baseTeamName);
+            var plDoc = await boardGet('pipeline', plTeamSlug);
             if (plDoc) {
-                boardVersions['pipeline:default'] = plDoc.version;
+                boardVersions['pipeline:' + plTeamSlug] = plDoc.version;
                 try {
                     var pl = JSON.parse(plDoc.content);
                     localStorage.setItem('ar_pipeline', JSON.stringify(pl));

@@ -216,7 +216,14 @@ function buildTitleContext(queryResult, workItemMap) {
     const iterationLevel2NoHyphen = (iterationPathParts[1] || '').replace(/-/g, '');
     const iterationToken = parseIterationLevel2Token(leafEpic.fields['System.IterationPath']);
     const areaLevel4 = parseAreaLevel4(leafEpic.fields['System.AreaPath']);
-    const areaLevel3 = parseAreaLevel3(leafEpic.fields['System.AreaPath']);
+
+    let areaLevel3 = '';
+    for (const rel of queryResult.workItemRelations || []) {
+        if (rel.target) {
+            const level3 = parseAreaLevel3(workItemMap[rel.target.id]?.fields?.['System.AreaPath']);
+            if (level3) { areaLevel3 = level3; break; }
+        }
+    }
 
     const leafEpics = findLeafEpics(queryResult, workItemMap);
     const uniqueTeams = new Set(
@@ -231,15 +238,13 @@ function buildTitleContext(queryResult, workItemMap) {
     else if (areaLevel4) flatSlideTitle = `${areaLevel4}`;
 
     let deckFileName = 'anything-report';
-    if (uniqueTeams.size > 1 && iterationLevel2NoHyphen && areaLevel3) {
+    if (iterationLevel2NoHyphen && areaLevel3) {
         deckFileName = `${iterationLevel2NoHyphen} ${areaLevel3}`;
     } else if (iterationLevel2NoHyphen && areaLevel4) {
         deckFileName = `${iterationLevel2NoHyphen} - ${areaLevel4} Check In`;
     }
 
-    const topOfMindTeamName = (uniqueTeams.size > 1 && areaLevel3)
-        ? areaLevel3
-        : (areaLevel4 || '');
+    const topOfMindTeamName = areaLevel3;
 
     return {
         baseTeamName: topOfMindTeamName,

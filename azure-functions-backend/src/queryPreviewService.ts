@@ -130,7 +130,17 @@ function buildTitleContext(queryResult: WiqlTreeResult, workItemMap: Record<numb
     .filter(Boolean)[1]?.replace(/-/g, '') || '';
   const iterationToken = parseIterationLevel2Token(leafEpic.fields['System.IterationPath']);
   const areaLevel4 = parseAreaLevel4(leafEpic.fields['System.AreaPath']);
-  const areaLevel3 = parseAreaLevel3(leafEpic.fields['System.AreaPath']);
+
+  let areaLevel3 = '';
+  for (const relation of queryResult.workItemRelations || []) {
+    if (relation.target) {
+      const level3 = parseAreaLevel3(workItemMap[relation.target.id]?.fields['System.AreaPath']);
+      if (level3) {
+        areaLevel3 = level3;
+        break;
+      }
+    }
+  }
 
   const uniqueTeams = new Set(
     findLeafEpics(queryResult, workItemMap)
@@ -155,7 +165,7 @@ function buildTitleContext(queryResult: WiqlTreeResult, workItemMap: Record<numb
   }
 
   return {
-    baseTeamName: uniqueTeams.size > 1 && areaLevel3 ? areaLevel3 : (areaLevel4 || ''),
+    baseTeamName: areaLevel3,
     flatSlideTitle,
     flatSlidePrefix: iterationToken || '',
     deckFileName

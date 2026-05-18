@@ -8,7 +8,7 @@
     "generate-icon": "node generate-icon.js",
     "electron": "electron .",
     "electron:dev": "electron . --inspect",
-    "dist": "electron-builder --win",
+    "dist": "electron-builder --win --x64 --arm64",
     "build": "echo \"No build required\"",
     "build:azure": "echo \"No build required\""
   },

@@ -6,8 +6,9 @@ A lightweight, locally-run web app that turns an Azure DevOps query into a Power
 
 ### To install locally (Windows)
 
-1. Browse to: [My Onedrive](https://onedrive.cloud.microsoft/:f:/a@668pm6kq/r/_layouts/15/onedrive.aspx?id=%2Fa%40668pm6kq%2FDocuments%2Fdist&share=cgqrp5PxfDkFRLlImaHqItmpEgUCKRl%5FPwW8QK88udS0%2DN%2DT1Q)
+1. Browse to: [My Onedrive](https://onedrive.cloud.microsoft/:f:/a@668pm6kq/r/_layouts/15/onedrive.aspx?id=%2Fa%40668pm6kq%2FDocuments%2Fdist&share=cgqrp5PxfDkFRLlImaHqItmpEgUCKRl%5FPwW8QK88udS0%2DN%2DT1Q)  
 2. Double-click **Anything Report Setup 1.0.0**
+   > You may need to approve the download a couple of times before it will run.
 3. Launch **Anything Report** from your desktop
 
 ### Running reports

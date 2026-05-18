@@ -1295,6 +1295,9 @@ nav span {
     border: 2.5px solid #aaa;
     color: #666;
 }
+.pv-node.changed {
+    color: #CC0000 !important;
+}
 
 /* ── Pipeline editor ──────────────────────────────────────────── */
 .pl-editor {

@@ -24,7 +24,7 @@
             <div class="run-controls">
                 <button type="submit" id="runBtn">&#9654; Run</button>
             </div>
-            <label class="flat-view-label flat-view-under-run"><input type="checkbox" id="flatViewCheck"> Team View?</label>
+            <label class="flat-view-label flat-view-under-run" title="Uncheck to view by Mission"><input type="checkbox" id="flatViewCheck" checked> Team View?</label>
             <button type="button" id="pptxBtn" hidden title="Download as PowerPoint">&#8595; PPTX</button>
         </form>
     </header>
@@ -613,11 +613,12 @@
                     h += '<div class="pv-cell">';
                     if (here) h += '<div class="pv-arrow">&#11015;</div>';
                     if (warn) h += '<div class="pv-warn" title="Watch item">&#9888;&#65039;</div>';
+                    var isChanged = !!(v && row.changedLabels && row.changedLabels[c]);
                     if (done) {
-                        h += '<div class="pv-node complete' + (v ? ' labeled' : '') + '">' + (v || '') + '</div>';
+                        h += '<div class="pv-node complete' + (v ? ' labeled' : '') + (isChanged ? ' changed' : '') + '">' + (v || '') + '</div>';
                     } else if (!empty) {
                         var cls = committedMark ? 'committed' : 'future';
-                        h += '<div class="pv-node ' + cls + '">' + v + '</div>';
+                        h += '<div class="pv-node ' + cls + (isChanged ? ' changed' : '') + '">' + v + '</div>';
                     }
                     h += '</div>';
                 }
@@ -744,7 +745,7 @@
                 h += '<label class="pl-checkbox-label"><input type="checkbox" class="pl-cb-committed" data-s="' + s + '"' + (parsed.committed ? ' checked' : '') + '> Committed</label>';
                 h += '</div>';
                 h += '<div class="pl-field">';
-                h += '<label class="pl-field-label" for="plFS' + s + '">Cycle label <span class="pl-field-hint">e.g. M1, Q2</span></label>';
+                h += '<label class="pl-field-label" for="plFS' + s + '">Cycle label <span class="pl-field-hint">e.g. 26C4</span></label>';
                 h += '<input type="text" class="pl-input pl-stage-label" data-s="' + s + '" id="plFS' + s + '" value="' + (parsed.label || '').replace(/"/g, '&quot;') + '" placeholder="Cycle label\u2026" autocomplete="off">';
                 h += '</div></div>';
             }
@@ -823,7 +824,19 @@
             }
             var pl = plLoad(ctx.storageKey) || { title: DEFAULT_PIPELINE_TITLE, queryUrl: '', rows: [] };
             var isAdding = ctx.rowIndex === null || ctx.rowIndex === undefined;
-            var newRow = { topic: topic, stages: stages, hereCol: hereCol, warnCol: warnCol, readonlyTopic: false };
+            var prevRow = isAdding ? null : (pl.rows[ctx.rowIndex] || null);
+            var changedLabels = [];
+            for (var cl = 0; cl < 6; cl++) {
+                var clInput = body.querySelector('.pl-stage-label[data-s="' + cl + '"]');
+                var clNew = normalizePipelineStageValue(clInput ? clInput.value : '');
+                var clOld = prevRow ? parsePipelineStageValue((prevRow.stages || [])[cl] || '').label : '';
+                if (prevRow && clNew !== '') {
+                    changedLabels[cl] = clNew !== clOld ? true : !!(prevRow.changedLabels && prevRow.changedLabels[cl]);
+                } else {
+                    changedLabels[cl] = false;
+                }
+            }
+            var newRow = { topic: topic, stages: stages, hereCol: hereCol, warnCol: warnCol, readonlyTopic: false, changedLabels: changedLabels };
             if (!isAdding) {
                 newRow.readonlyTopic = !!((pl.rows[ctx.rowIndex] || {}).readonlyTopic);
                 pl.rows[ctx.rowIndex] = newRow;

@@ -713,6 +713,7 @@
                             });
                         }
 
+                        var isLabelChanged = !!(v && row.changedLabels && row.changedLabels[sc]);
                         if (isDone) {
                             spl.addShape(pres.ShapeType.ellipse, {
                                 x: cx - plNodeD * 0.5, y: centerY - plNodeD * 0.5,
@@ -725,7 +726,7 @@
                                     w: plNodeD - 0.04, h: plNodeD - 0.04,
                                     align: 'center', valign: 'mid', fit: 'shrink',
                                     fontSize: 12, bold: true,
-                                    color: '000000', fontFace: theme.bodyFont
+                                    color: isLabelChanged ? 'CC0000' : '000000', fontFace: theme.bodyFont
                                 });
                             }
                             continue;
@@ -745,7 +746,7 @@
                                     w: plNodeD - 0.04, h: plNodeD - 0.04,
                                     align: 'center', valign: 'mid', fit: 'shrink',
                                     fontSize: 12, bold: true,
-                                    color: committed ? theme.topicPillTextColor : '666666', fontFace: theme.bodyFont
+                                    color: isLabelChanged ? 'CC0000' : (committed ? theme.topicPillTextColor : '666666'), fontFace: theme.bodyFont
                                 });
                             }
                         }

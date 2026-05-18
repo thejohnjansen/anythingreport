@@ -1036,7 +1036,13 @@
             }
         }
 
-        pres.writeFile({ fileName: deckFileName + '.pptx' });
+        if (window.electronBridge && typeof window.electronBridge.savePptx === 'function') {
+            var arrayBuffer = await pres.write('arraybuffer');
+            var result = await window.electronBridge.savePptx(arrayBuffer, deckFileName + '.pptx');
+            if (result && result.canceled) return; // user dismissed the dialog
+        } else {
+            pres.writeFile({ fileName: deckFileName + '.pptx' });
+        }
     }
 
     var btn = document.getElementById('pptxBtn');

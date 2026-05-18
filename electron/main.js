@@ -2,8 +2,9 @@
 
 require('dotenv').config({ path: require('path').join(__dirname, '..', '.env') });
 
-const { app, BrowserWindow, shell, Menu } = require('electron');
+const { app, BrowserWindow, shell, Menu, ipcMain, dialog } = require('electron');
 const path = require('path');
+const fs = require('fs');
 const { spawn } = require('child_process');
 const http = require('http');
 const { getAccessToken, hasCachedAccount, signOut } = require('./msalAuth');
@@ -240,6 +241,18 @@ app.whenReady().then(async () => {
             }
         ]));
     }
+});
+
+/* ── Save PPTX and open it ── */
+ipcMain.handle('save-pptx', async (_event, { buffer, defaultFileName }) => {
+    const { canceled, filePath } = await dialog.showSaveDialog(mainWindow, {
+        defaultPath: defaultFileName,
+        filters: [{ name: 'PowerPoint', extensions: ['pptx'] }]
+    });
+    if (canceled || !filePath) return { canceled: true };
+    await fs.promises.writeFile(filePath, Buffer.from(buffer));
+    shell.openPath(filePath);
+    return { canceled: false, filePath };
 });
 
 app.on('window-all-closed', () => {

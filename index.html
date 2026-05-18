@@ -259,17 +259,12 @@
         }
 
         function refreshPipelineVisualization(storageKey, pl) {
-            /* Find the pipeline slide's viz container and re-render if not in edit mode */
-            document.querySelectorAll('.slide').forEach(function(slide) {
+            document.querySelectorAll('.slide-pipeline').forEach(function(slide) {
+                if (slide.dataset.storageKey !== storageKey) return;
                 var viz = slide.querySelector('.pl-viz');
-                var ed = slide.querySelector('.pl-editor');
-                if (!viz || !ed) return;
-                /* Check if this slide's storage key matches */
-                var btn = slide.querySelector('.pl-edit-btn');
-                if (!btn) return;
-                if (ed.hidden !== false) { /* not in edit mode */
-                    viz.innerHTML = plVizHTML(pl);
-                }
+                if (!viz) return;
+                viz.innerHTML = plVizHTML(pl);
+                plWireupVizRows(slide, storageKey);
             });
         }
 
@@ -491,6 +486,34 @@
             return t ? ('Pipeline - ' + t) : DEFAULT_PIPELINE_TITLE;
         }
 
+        /* Returns the list of known flat-team names, preferring the saved list
+           but falling back to scanning localStorage for ar_pipeline_team_* keys
+           (which exist from previous runs even before ar_flat_team_names was added). */
+        function getStoredFlatTeamNames() {
+            var saved = localStorage.getItem('ar_flat_team_names');
+            if (saved) {
+                try {
+                    var parsed = JSON.parse(saved);
+                    if (Array.isArray(parsed) && parsed.length > 0) return parsed;
+                } catch(e) {}
+            }
+            /* Fallback: scan for ar_pipeline_team_* keys and read team name from title */
+            var teams = [];
+            for (var _i = 0; _i < localStorage.length; _i++) {
+                var _k = localStorage.key(_i);
+                if (_k && _k.indexOf('ar_pipeline_team_') === 0) {
+                    try {
+                        var _d = JSON.parse(localStorage.getItem(_k));
+                        if (_d && _d.title) {
+                            var _tn = extractTeamNameFromSlideTitle(_d.title);
+                            if (_tn && _tn !== DEFAULT_PIPELINE_TITLE) teams.push(_tn);
+                        }
+                    } catch(e) {}
+                }
+            }
+            return teams.length > 0 ? teams : null;
+        }
+
         function buildPipelinePlaceholders(rowCount) {
             var rows = [];
             for (var i = 0; i < rowCount; i++) {
@@ -559,22 +582,9 @@
             return { complete: false, committed: false, label: normalizePipelineStageValue(raw) };
         }
 
-        function plStageEditorCellHTML(value) {
-            var parsed = parsePipelineStageValue(value);
-            var completeChecked = parsed.complete;
-            var committedChecked = !!parsed.committed;
-            var label = parsed.label || '';
-            return '<td><label class="pe-stage-wrap">' +
-                '<span class="pe-stage-flags">' +
-                '<label class="pe-stage-flag" title="Completed"><input type="checkbox" class="pe-stage-complete"' + (completeChecked ? ' checked' : '') + '><span>C</span></label>' +
-                '<label class="pe-stage-flag" title="Committed"><input type="checkbox" class="pe-stage-committed"' + (committedChecked ? ' checked' : '') + '><span>M</span></label>' +
-                '</span>' +
-                '<input type="text" class="pe-stage-input" value="' + label.replace(/"/g, '&quot;') + '" placeholder="Cycle"></label></td>';
-        }
-
         function plVizHTML(pl) {
             if (!pl || !pl.rows || !pl.rows.length)
-                return '<p class="pv-empty">Click <b>&#9998; Edit</b> to add pipeline rows.</p>';
+                return '<p class="pv-empty">Click <b>+ Add Row</b> below to add pipeline rows.</p>';
             var h = '<div class="pv-legend">' +
                 '<span class="pv-leg"><span class="pv-leg-arrow">&#11015;</span> Roughly &ldquo;Where we are&rdquo;</span>' +
                 '<span class="pv-leg"><span class="pv-leg-circ complete"></span> Completed</span>' +
@@ -585,7 +595,11 @@
             h += '</div>';
             for (var r = 0; r < pl.rows.length; r++) {
                 var row = pl.rows[r];
-                h += '<div class="pv-row"><div class="pv-topic"><span>' + (row.topic || '') + '</span></div>';
+                h += '<div class="pv-row"><div class="pv-topic"><span>' + escapeHtml(row.topic || '') + '</span>' +
+                    '<div class="pv-topic-actions">' +
+                    '<button type="button" class="pv-row-btn pv-row-btn--edit" data-row="' + r + '">Edit</button>' +
+                    '<button type="button" class="pv-row-btn pv-row-btn--delete" data-row="' + r + '">Delete</button>' +
+                    '</div></div>';
                 h += '<div class="pv-stages"><div class="pv-line"></div>';
                 for (var c = 0; c < 6; c++) {
                     var parsed = parsePipelineStageValue(row.stages && row.stages[c] || '');
@@ -612,49 +626,6 @@
             return h;
         }
 
-        function plEditorRowHTML(rd) {
-            rd = rd || { topic: '', stages: ['','','','','',''], hereCol: -1, warnCol: -1, readonlyTopic: false };
-            var h = '<tr class="pe-row"><td><input type="text" class="pe-topic" value="' +
-                (rd.topic || '').replace(/"/g, '&quot;') + '" placeholder="Topic name" data-readonly-topic="false"></td>';
-            for (var s = 0; s < 6; s++) h += plStageEditorCellHTML(rd.stages[s] || '');
-            h += '<td><select class="pe-here"><option value="-1"' +
-                (rd.hereCol < 0 ? ' selected' : '') + '>&mdash;</option>';
-            for (var s = 0; s < PL_STAGES.length; s++)
-                h += '<option value="' + s + '"' + (rd.hereCol === s ? ' selected' : '') + '>' + PL_STAGES[s] + '</option>';
-            h += '</select></td><td><select class="pe-warn"><option value="-1"' +
-                ((rd.warnCol === undefined || rd.warnCol < 0) ? ' selected' : '') + '>&mdash;</option>';
-            for (var s = 0; s < PL_STAGES.length; s++)
-                h += '<option value="' + s + '"' + (rd.warnCol === s ? ' selected' : '') + '>' + PL_STAGES[s] + '</option>';
-            h += '</select></td><td><button type="button" class="pe-remove" title="Remove">&times;</button></td></tr>';
-            return h;
-        }
-
-        function plEditorHTML(pl) {
-            var d = pl || { title: DEFAULT_PIPELINE_TITLE, rows: [] };
-            var h = '<table class="pe-table"><thead><tr><th class="pe-th-topic">Topic</th>';
-            for (var s = 0; s < PL_STAGES.length; s++) {
-                var stageLabel = PL_STAGES[s]
-                    .replace('Explainer / Design Doc', 'Explainer /<br>Design Doc')
-                    .replace('Origin Trial / CFR', 'Origin Trial /<br>CFR');
-                h += '<th>' + stageLabel + '</th>';
-            }
-            h += '<th>Here</th><th>Warn</th><th></th></tr></thead><tbody id="peRows">';
-            for (var r = 0; r < d.rows.length; r++) h += plEditorRowHTML(d.rows[r]);
-            h += '</tbody></table>';
-            h += '<div class="pe-actions"><button type="button" class="pe-add" id="peAdd">+ Add Row</button>';
-            h += '<button type="button" class="pe-apply" id="peApply">&#10003; Apply</button></div>';
-            return h;
-        }
-
-        function plSyncStageInputs(container) {
-            container.querySelectorAll('.pe-stage-wrap').forEach(function (wrap) {
-                var checkbox = wrap.querySelector('.pe-stage-complete');
-                var input = wrap.querySelector('.pe-stage-input');
-                if (!checkbox || !input) return;
-                input.disabled = false;
-            });
-        }
-
         async function plFetchRows(queryUrl) {
             var res = await fetch('/api/pipeline', {
                 method: 'POST',
@@ -671,36 +642,6 @@
 
         function plTopicKey(topic) {
             return (topic || '').trim().toLowerCase();
-        }
-
-        function plReadEditorRows(editorEl) {
-            var rows = [];
-            editorEl.querySelectorAll('.pe-row').forEach(function(tr) {
-                var topicInput = tr.querySelector('.pe-topic');
-                var topic = topicInput ? topicInput.value : '';
-                var stages = [];
-                tr.querySelectorAll('.pe-stage-wrap').forEach(function(wrap) {
-                    var completeCb = wrap.querySelector('.pe-stage-complete');
-                    var committedCb = wrap.querySelector('.pe-stage-committed');
-                    var input = wrap.querySelector('.pe-stage-input');
-                    var label = normalizePipelineStageValue(input ? input.value : '');
-                    if (completeCb && completeCb.checked) {
-                        stages.push(label ? ('complete|' + label) : 'complete');
-                    } else if (committedCb && committedCb.checked) {
-                        stages.push(label ? ('committed|' + label) : 'committed');
-                    } else {
-                        stages.push(label);
-                    }
-                });
-                rows.push({
-                    topic: topic,
-                    stages: stages,
-                    hereCol: parseInt(tr.querySelector('.pe-here').value, 10),
-                    warnCol: parseInt(tr.querySelector('.pe-warn').value, 10),
-                    readonlyTopic: topicInput ? topicInput.dataset.readonlyTopic === 'true' : false
-                });
-            });
-            return rows;
         }
 
         function plMergeRowsByTopic(existingRows, fetchedRows) {
@@ -722,167 +663,287 @@
             });
         }
 
-        async function plPopulateFromQuery(editorEl, titleEl, queryEl, storageKey) {
-            var queryUrl = queryEl ? queryEl.value.trim() : '';
-            if (!queryUrl) throw new Error('Pipeline query URL is required');
+        /* ── Pipeline Drawer ──────────────────────────────────────── */
+        var _plDrawer = null; // { bd, dr, ctx }
 
-            var fetchResult = await plFetchRows(queryUrl);
-            var fetchedRows = fetchResult.rows;
-            if (!fetchedRows.length) {
-                var d = fetchResult.diagnostics;
-                if (d) {
-                    throw new Error(
-                        'No work item titles were returned from this query. Existing rows were left unchanged. ' +
-                        '(WIQL workItems=' + d.wiqlWorkItemsCount +
-                        ', WIQL relations=' + d.wiqlRelationsCount +
-                        ', unique IDs=' + d.uniqueIdCount +
-                        ', fetched items=' + d.fetchedWorkItemCount + '.)'
-                    );
-                }
-                throw new Error('No work item titles were returned from this query. Existing rows were left unchanged.');
+        function plEnsureDrawer() {
+            if (_plDrawer) return _plDrawer;
+            var bd = document.createElement('div');
+            bd.className = 'pl-drawer-backdrop';
+            document.body.appendChild(bd);
+            var dr = document.createElement('aside');
+            dr.className = 'pl-drawer';
+            dr.setAttribute('role', 'dialog');
+            dr.setAttribute('aria-modal', 'true');
+            dr.innerHTML =
+                '<div class="pl-drawer-header">' +
+                '<h3 class="pl-drawer-title" id="plDrawerTitle">Edit Row</h3>' +
+                '<button type="button" class="pl-drawer-x" id="plDrawerX" aria-label="Close">\u2715</button>' +
+                '</div>' +
+                '<div class="pl-drawer-body" id="plDrawerBody"></div>' +
+                '<div class="pl-drawer-footer">' +
+                '<button type="button" class="pl-drawer-btn pl-drawer-btn-primary" id="plDrawerSave">Save</button>' +
+                '<button type="button" class="pl-drawer-btn pl-drawer-btn-secondary" id="plDrawerCancel">Cancel</button>' +
+                '<button type="button" class="pl-drawer-btn pl-drawer-btn-danger" id="plDrawerDelete">Delete</button>' +
+                '</div>';
+            document.body.appendChild(dr);
+            bd.addEventListener('click', plCloseDrawer);
+            dr.querySelector('#plDrawerX').addEventListener('click', plCloseDrawer);
+            dr.querySelector('#plDrawerCancel').addEventListener('click', plCloseDrawer);
+            dr.querySelector('#plDrawerSave').addEventListener('click', plSaveDrawer);
+            dr.querySelector('#plDrawerDelete').addEventListener('click', plDeleteDrawerRow);
+            document.addEventListener('keydown', function(e) {
+                if (e.key === 'Escape' && _plDrawer && _plDrawer.ctx) plCloseDrawer();
+            });
+            _plDrawer = { bd: bd, dr: dr, ctx: null };
+            return _plDrawer;
+        }
+
+        function plBuildDrawerForm(row) {
+            var r = row || { topic: '', stages: ['','','','','',''], hereCol: -1, warnCol: -1, readonlyTopic: false };
+            var isReadonly = !!r.readonlyTopic;
+            var h = '<div class="pl-form">';
+            // Topic
+            h += '<div class="pl-field">';
+            h += '<label class="pl-field-label" for="plFTopic">Topic</label>';
+            if (isReadonly) {
+                h += '<div class="pl-topic-readonly">' + escapeHtml(r.topic) + '</div>';
+                h += '<input type="hidden" id="plFTopic" value="' + escapeHtml(r.topic).replace(/"/g, '&quot;') + '">';
+            } else {
+                h += '<input type="text" id="plFTopic" class="pl-input" value="' + escapeHtml(r.topic).replace(/"/g, '&quot;') + '" placeholder="Topic name" autocomplete="off">';
+                h += '<div class="pl-input-error-msg" id="plFTopicErr" hidden>Topic name is required.</div>';
             }
-            var existingRows = plReadEditorRows(editorEl);
-            var mergedRows = plMergeRowsByTopic(existingRows, fetchedRows);
-            var pl = plLoad(storageKey) || { title: 'Pipeline', queryUrl: '', rows: [] };
-            pl.title = titleEl.textContent || DEFAULT_PIPELINE_TITLE;
-            pl.queryUrl = queryUrl;
-            pl.rows = mergedRows;
-            plSave(pl, storageKey);
-            return pl;
+            h += '</div>';
+            // Current Stage
+            h += '<div class="pl-field">';
+            h += '<label class="pl-field-label" for="plFHere">Current Stage <span class="pl-field-hint">Shows &#11015; &ldquo;here&rdquo; arrow</span></label>';
+            h += '<select id="plFHere" class="pl-select">';
+            h += '<option value="-1"' + (r.hereCol < 0 ? ' selected' : '') + '>\u2014 None \u2014</option>';
+            for (var i = 0; i < PL_STAGES.length; i++) {
+                h += '<option value="' + i + '"' + (r.hereCol === i ? ' selected' : '') + '>' + escapeHtml(PL_STAGES[i]) + '</option>';
+            }
+            h += '</select></div>';
+            // Watch Stage
+            h += '<div class="pl-field">';
+            h += '<label class="pl-field-label" for="plFWarn">Watch Stage <span class="pl-field-hint">Shows &#9888; warning marker</span></label>';
+            h += '<select id="plFWarn" class="pl-select">';
+            h += '<option value="-1"' + ((r.warnCol === undefined || r.warnCol < 0) ? ' selected' : '') + '>\u2014 None \u2014</option>';
+            for (var j = 0; j < PL_STAGES.length; j++) {
+                h += '<option value="' + j + '"' + (r.warnCol === j ? ' selected' : '') + '>' + escapeHtml(PL_STAGES[j]) + '</option>';
+            }
+            h += '</select></div>';
+            // Stages
+            h += '<div class="pl-section">Stages</div>';
+            for (var s = 0; s < PL_STAGES.length; s++) {
+                var parsed = parsePipelineStageValue(r.stages[s] || '');
+                h += '<div class="pl-stage-block">';
+                h += '<div class="pl-stage-block-title">' + escapeHtml(PL_STAGES[s]) + '</div>';
+                h += '<div class="pl-field pl-field--inline">';
+                h += '<label class="pl-checkbox-label"><input type="checkbox" class="pl-cb-complete" data-s="' + s + '"' + (parsed.complete ? ' checked' : '') + '> Completed</label>';
+                h += '<label class="pl-checkbox-label"><input type="checkbox" class="pl-cb-committed" data-s="' + s + '"' + (parsed.committed ? ' checked' : '') + '> Committed</label>';
+                h += '</div>';
+                h += '<div class="pl-field">';
+                h += '<label class="pl-field-label" for="plFS' + s + '">Cycle label <span class="pl-field-hint">e.g. M1, Q2</span></label>';
+                h += '<input type="text" class="pl-input pl-stage-label" data-s="' + s + '" id="plFS' + s + '" value="' + (parsed.label || '').replace(/"/g, '&quot;') + '" placeholder="Cycle label\u2026" autocomplete="off">';
+                h += '</div></div>';
+            }
+            h += '</div>';
+            return h;
         }
 
-        async function plApply(vizEl, editorEl, titleEl, queryEl, storageKey) {
-            var pl = {
-                title: titleEl.textContent || DEFAULT_PIPELINE_TITLE,
-                queryUrl: queryEl ? queryEl.value.trim() : '',
-                rows: plReadEditorRows(editorEl)
-            };
-            plSave(pl, storageKey);
-            vizEl.innerHTML = plVizHTML(pl);
+        function plOpenDrawer(opts) {
+            var d = plEnsureDrawer();
+            d.ctx = opts;
+            var isAdding = opts.rowIndex === null || opts.rowIndex === undefined;
+            var pl = plLoad(opts.storageKey) || { rows: [] };
+            var row = isAdding ? null : (pl.rows[opts.rowIndex] || null);
+            d.dr.querySelector('#plDrawerTitle').textContent = isAdding ? 'Add Row' : 'Edit Row';
+            d.dr.querySelector('#plDrawerDelete').hidden = isAdding;
+            d.dr.querySelector('#plDrawerBody').innerHTML = plBuildDrawerForm(row);
+            var body = d.dr.querySelector('#plDrawerBody');
+            body.querySelectorAll('.pl-cb-complete').forEach(function(cb) {
+                cb.addEventListener('change', function() {
+                    if (cb.checked) {
+                        var comm = body.querySelector('.pl-cb-committed[data-s="' + cb.dataset.s + '"]');
+                        if (comm) comm.checked = false;
+                    }
+                });
+            });
+            body.querySelectorAll('.pl-cb-committed').forEach(function(cb) {
+                cb.addEventListener('change', function() {
+                    if (cb.checked) {
+                        var comp = body.querySelector('.pl-cb-complete[data-s="' + cb.dataset.s + '"]');
+                        if (comp) comp.checked = false;
+                    }
+                });
+            });
+            d.bd.classList.add('pl-drawer-backdrop--open');
+            d.dr.classList.add('pl-drawer--open');
+            var first = d.dr.querySelector('#plFTopic');
+            if (first && first.type !== 'hidden') setTimeout(function() { first.focus(); }, 50);
         }
 
-        function plWireup(slideEl, storageKey, editSeedRows) {
+        function plCloseDrawer() {
+            if (!_plDrawer) return;
+            _plDrawer.ctx = null;
+            _plDrawer.bd.classList.remove('pl-drawer-backdrop--open');
+            _plDrawer.dr.classList.remove('pl-drawer--open');
+        }
+
+        function plSaveDrawer() {
+            if (!_plDrawer || !_plDrawer.ctx) return;
+            var ctx = _plDrawer.ctx;
+            var body = _plDrawer.dr.querySelector('#plDrawerBody');
+            var topicInput = body.querySelector('#plFTopic');
+            var topicErr = body.querySelector('#plFTopicErr');
+            var topic = topicInput ? topicInput.value.trim() : '';
+            if (!topic) {
+                if (topicInput && topicInput.type !== 'hidden') topicInput.classList.add('pl-input--error');
+                if (topicErr) topicErr.hidden = false;
+                return;
+            }
+            if (topicInput) topicInput.classList.remove('pl-input--error');
+            if (topicErr) topicErr.hidden = true;
+            var hereCol = parseInt(body.querySelector('#plFHere').value, 10);
+            var warnCol = parseInt(body.querySelector('#plFWarn').value, 10);
+            var stages = [];
+            for (var s = 0; s < 6; s++) {
+                var completeCb = body.querySelector('.pl-cb-complete[data-s="' + s + '"]');
+                var committedCb = body.querySelector('.pl-cb-committed[data-s="' + s + '"]');
+                var labelInput = body.querySelector('.pl-stage-label[data-s="' + s + '"]');
+                var lbl = normalizePipelineStageValue(labelInput ? labelInput.value : '');
+                if (completeCb && completeCb.checked) {
+                    stages.push(lbl ? ('complete|' + lbl) : 'complete');
+                } else if (committedCb && committedCb.checked) {
+                    stages.push(lbl ? ('committed|' + lbl) : 'committed');
+                } else {
+                    stages.push(lbl);
+                }
+            }
+            var pl = plLoad(ctx.storageKey) || { title: DEFAULT_PIPELINE_TITLE, queryUrl: '', rows: [] };
+            var isAdding = ctx.rowIndex === null || ctx.rowIndex === undefined;
+            var newRow = { topic: topic, stages: stages, hereCol: hereCol, warnCol: warnCol, readonlyTopic: false };
+            if (!isAdding) {
+                newRow.readonlyTopic = !!((pl.rows[ctx.rowIndex] || {}).readonlyTopic);
+                pl.rows[ctx.rowIndex] = newRow;
+            } else {
+                pl.rows.push(newRow);
+            }
+            plSave(pl, ctx.storageKey);
+            var viz = ctx.slideEl.querySelector('.pl-viz');
+            if (viz) {
+                viz.innerHTML = plVizHTML(pl);
+                plWireupVizRows(ctx.slideEl, ctx.storageKey);
+            }
+            plCloseDrawer();
+            var newIdx = isAdding ? pl.rows.length - 1 : ctx.rowIndex;
+            if (viz) {
+                var rowEls = viz.querySelectorAll('.pv-row');
+                if (rowEls[newIdx]) {
+                    rowEls[newIdx].classList.add('pv-row--highlight');
+                    setTimeout(function() { rowEls[newIdx].classList.remove('pv-row--highlight'); }, 1500);
+                }
+            }
+        }
+
+        function plDeleteDrawerRow() {
+            if (!_plDrawer || !_plDrawer.ctx) return;
+            var ctx = _plDrawer.ctx;
+            if (ctx.rowIndex === null || ctx.rowIndex === undefined) return;
+            if (!confirm('Delete this row?')) return;
+            var pl = plLoad(ctx.storageKey) || { title: DEFAULT_PIPELINE_TITLE, queryUrl: '', rows: [] };
+            pl.rows.splice(ctx.rowIndex, 1);
+            plSave(pl, ctx.storageKey);
+            var viz = ctx.slideEl.querySelector('.pl-viz');
+            if (viz) {
+                viz.innerHTML = plVizHTML(pl);
+                plWireupVizRows(ctx.slideEl, ctx.storageKey);
+            }
+            plCloseDrawer();
+        }
+
+        function plWireupVizRows(slideEl, storageKey) {
+            var viz = slideEl.querySelector('.pl-viz');
+            if (!viz) return;
+            viz.querySelectorAll('.pv-row-btn--edit').forEach(function(btn) {
+                btn.addEventListener('click', function(e) {
+                    e.stopPropagation();
+                    plOpenDrawer({ storageKey: storageKey, rowIndex: parseInt(btn.dataset.row, 10), slideEl: slideEl });
+                });
+            });
+            viz.querySelectorAll('.pv-row-btn--delete').forEach(function(btn) {
+                btn.addEventListener('click', function(e) {
+                    e.stopPropagation();
+                    var rowIndex = parseInt(btn.dataset.row, 10);
+                    if (!confirm('Delete this row?')) return;
+                    var pl = plLoad(storageKey) || { rows: [] };
+                    pl.rows.splice(rowIndex, 1);
+                    plSave(pl, storageKey);
+                    viz.innerHTML = plVizHTML(pl);
+                    plWireupVizRows(slideEl, storageKey);
+                });
+            });
+        }
+
+        function plWireup(slideEl, storageKey) {
             var $viz = slideEl.querySelector('.pl-viz');
-            var $ed  = slideEl.querySelector('.pl-editor');
-            var $btn = slideEl.querySelector('.pl-edit-btn');
             var $ttl = slideEl.querySelector('.pl-title');
             var $query = slideEl.querySelector('.pl-query');
             var $queryRun = slideEl.querySelector('.pl-query-run');
-            var seedRows = (typeof editSeedRows === 'number' && editSeedRows > 0) ? editSeedRows : 4;
+            var $addBtn = slideEl.querySelector('.pl-add-row');
 
-            function wireStageControls(container) {
-                container.querySelectorAll('.pe-stage-wrap').forEach(function (wrap) {
-                    var completeCb = wrap.querySelector('.pe-stage-complete');
-                    var committedCb = wrap.querySelector('.pe-stage-committed');
+            plWireupVizRows(slideEl, storageKey);
 
-                    if (completeCb && completeCb.dataset.wired !== 'true') {
-                        completeCb.dataset.wired = 'true';
-                        completeCb.addEventListener('change', function () {
-                            if (!completeCb.checked) return;
-                            if (committedCb) committedCb.checked = false;
-                        });
-                    }
-
-                    if (committedCb && committedCb.dataset.wired !== 'true') {
-                        committedCb.dataset.wired = 'true';
-                        committedCb.addEventListener('change', function () {
-                            if (!committedCb.checked) return;
-                            if (completeCb) completeCb.checked = false;
-                        });
-                    }
+            if ($addBtn) {
+                $addBtn.addEventListener('click', function() {
+                    plOpenDrawer({ storageKey: storageKey, rowIndex: null, slideEl: slideEl });
                 });
-                plSyncStageInputs(container);
             }
 
-            function wireEditorButtons(container) {
-                function rerenderEditor(pl) {
-                    container.innerHTML = plEditorHTML(pl);
-                    wireEditorButtons(container);
-                }
-
-                container.querySelector('#peAdd').addEventListener('click', function() {
-                    var tbody = container.querySelector('#peRows');
-                    tbody.insertAdjacentHTML('beforeend', plEditorRowHTML(null));
-                    var last = tbody.lastElementChild;
-                    last.querySelector('.pe-remove').addEventListener('click', function() { last.remove(); });
-                    wireStageControls(last);
-                });
-                var runBtn = slideEl.querySelector('.pl-query-run');
-                if (runBtn && runBtn.dataset.wired !== 'true') {
-                    runBtn.dataset.wired = 'true';
-                    runBtn.addEventListener('click', async function () {
-                        try {
-                            runBtn.disabled = true;
-                            var pl = await plPopulateFromQuery(container, $ttl, $query, storageKey);
-                            rerenderEditor(pl);
-                        } catch (err) {
-                            alert('Error: ' + err.message);
-                        } finally {
-                            runBtn.disabled = false;
-                        }
-                    });
-                }
-                container.querySelector('#peApply').addEventListener('click', async function() {
-                    try {
-                        await plApply($viz, $ed, $ttl, $query, storageKey);
-                        $ed.hidden = true; $viz.hidden = false;
-                        if ($query) $query.hidden = true;
-                        if ($queryRun) $queryRun.hidden = true;
-                        $btn.innerHTML = '&#9998; Edit';
-                    } catch (err) {
-                        alert('Error: ' + err.message);
-                    }
-                });
-                container.querySelectorAll('.pe-remove').forEach(function(b) {
-                    b.addEventListener('click', function() { b.closest('.pe-row').remove(); });
-                });
-                wireStageControls(container);
-            }
-
-            $btn.addEventListener('click', async function() {
-                if (!$ed.hidden) {
-                    try {
-                        await plApply($viz, $ed, $ttl, $query, storageKey);
-                        $ed.hidden = true; $viz.hidden = false;
-                        if ($query) $query.hidden = true;
-                        if ($queryRun) $queryRun.hidden = true;
-                        $btn.innerHTML = '&#9998; Edit';
-                    } catch (err) {
-                        alert('Error: ' + err.message);
-                    }
-                } else {
+            if ($ttl) {
+                $ttl.addEventListener('input', function() {
                     var pl = plLoad(storageKey) || { title: DEFAULT_PIPELINE_TITLE, queryUrl: '', rows: [] };
-                    if (!pl.rows || pl.rows.length === 0) {
-                        pl.rows = buildPipelinePlaceholders(seedRows);
-                        plSave(pl, storageKey);
-                    }
-                    $ed.innerHTML = plEditorHTML(pl);
-                    if ($query) {
-                        $query.hidden = false;
-                        $query.value = pl.queryUrl || '';
-                    }
-                    if ($queryRun) $queryRun.hidden = false;
-                    wireEditorButtons($ed);
-                    $ed.hidden = false; $viz.hidden = true;
-                    $btn.innerHTML = '&#10003; Done';
-                }
-            });
-
-            $ttl.addEventListener('input', function() {
-                var pl = plLoad(storageKey) || { title: DEFAULT_PIPELINE_TITLE, queryUrl: '', rows: [] };
-                pl.title = $ttl.textContent || DEFAULT_PIPELINE_TITLE;
-                plSave(pl, storageKey);
-            });
+                    pl.title = $ttl.textContent || DEFAULT_PIPELINE_TITLE;
+                    plSave(pl, storageKey);
+                });
+            }
 
             if ($query) {
-                $query.addEventListener('input', function () {
+                $query.addEventListener('input', function() {
                     var pl = plLoad(storageKey) || { title: DEFAULT_PIPELINE_TITLE, queryUrl: '', rows: [] };
                     pl.queryUrl = $query.value;
                     plSave(pl, storageKey);
                 });
             }
 
-            wireEditorButtons($ed);
+            if ($queryRun) {
+                $queryRun.addEventListener('click', async function() {
+                    var url = $query ? $query.value.trim() : '';
+                    if (!url) { alert('Please enter an ADO query URL first.'); return; }
+                    try {
+                        $queryRun.disabled = true;
+                        $queryRun.textContent = 'Syncing\u2026';
+                        var result = await plFetchRows(url);
+                        if (!result.rows.length) {
+                            var d = result.diagnostics;
+                            throw new Error(d
+                                ? 'No work item titles returned. (WIQL workItems=' + d.wiqlWorkItemsCount + ', fetched=' + d.fetchedWorkItemCount + ')'
+                                : 'No work item titles returned from this query.');
+                        }
+                        var pl = plLoad(storageKey) || { title: DEFAULT_PIPELINE_TITLE, queryUrl: url, rows: [] };
+                        pl.queryUrl = url;
+                        pl.rows = plMergeRowsByTopic(pl.rows, result.rows);
+                        plSave(pl, storageKey);
+                        $viz.innerHTML = plVizHTML(pl);
+                        plWireupVizRows(slideEl, storageKey);
+                    } catch (err) {
+                        alert('Error: ' + err.message);
+                    } finally {
+                        $queryRun.disabled = false;
+                        $queryRun.textContent = 'Sync Topics';
+                    }
+                });
+            }
         }
 
         function createPipelineSlide(opts) {
@@ -899,18 +960,18 @@
                 : titleHtmlWithTeam('Pipeline');
             var div = document.createElement('div');
             div.className = 'slide slide-pipeline';
+            div.dataset.storageKey = storageKey;
             div.innerHTML =
                 '<div class="pipeline-header">' +
                 '<div class="pipeline-title-row">' +
                 '<h2 class="pl-title" contenteditable="false">' + pipelineTitleHtml + '</h2>' +
-                '<input type="text" class="pl-query" hidden placeholder="Paste ADO query to pre-populate the Titles" value="' + ((pl.queryUrl || '').replace(/"/g, '&quot;')) + '">' +
-                '<button type="button" class="pl-query-run" hidden>Run</button>' +
-                '</div>' +
-                '<button type="button" class="pl-edit-btn">&#9998; Edit</button></div>' +
+                '<input type="text" class="pl-query" placeholder="Paste ADO query URL to sync topics" value="' + ((pl.queryUrl || '').replace(/"/g, '&quot;')) + '">' +
+                '<button type="button" class="pl-query-run">Sync Topics</button>' +
+                '</div></div>' +
                 '<div class="pl-viz">' + plVizHTML(pl) + '</div>' +
-                '<div class="pl-editor" hidden>' + plEditorHTML(pl) + '</div>';
+                '<button type="button" class="pl-add-row">+ Add Row</button>';
             $deck.appendChild(div);
-            plWireup(div, storageKey, 4);
+            plWireup(div, storageKey);
         }
 
         /* ── Render SLIDES view ─────────────────────────────────── */
@@ -942,7 +1003,9 @@
                 return String(slide.id || '').indexOf('flat-') === 0;
             });
 
-            var shouldShowMainPipeline = !hasFlatTeamSlides && (slides.length > 0 || showPipelineWhenEmpty);
+            var preloadFlatTeams = (!hasFlatTeamSlides && Array.isArray(opts.preloadFlatTeams) && opts.preloadFlatTeams.length > 0)
+                ? opts.preloadFlatTeams : null;
+            var shouldShowMainPipeline = !hasFlatTeamSlides && !preloadFlatTeams && (slides.length > 0 || showPipelineWhenEmpty);
 
             if (shouldShowMainPipeline) {
                 /* Slide 2: Pipeline */
@@ -1007,8 +1070,20 @@
                 }
             }
 
+            if (!hasFlatTeamSlides && preloadFlatTeams) {
+                preloadFlatTeams.forEach(function(teamName) {
+                    createPipelineSlide({
+                        storageKey: teamPipelineStorageKey(teamName),
+                        teamName: teamName,
+                        placeholderRows: 4
+                    });
+                });
+            }
+
             if (hasFlatTeamSlides) {
                 total = 1 + slides.length * 2;
+            } else if (preloadFlatTeams) {
+                total = 1 + preloadFlatTeams.length;
             } else {
                 total = (shouldShowMainPipeline ? 2 : 1) + slides.length;
             }
@@ -1645,6 +1720,17 @@
                 deckFileName = slideData.deckFileName || 'anything-report';
 
                 renderSlides(slideData.slides);
+
+                /* Persist flat-team list so pipelines appear before next Run */
+                if (flatView) {
+                    var flatTeamNames = (slideData.slides || [])
+                        .filter(function(s) { return String(s.id || '').indexOf('flat-') === 0; })
+                        .map(function(s) { return extractTeamNameFromSlideTitle(s.title); });
+                    localStorage.setItem('ar_flat_team_names', JSON.stringify(flatTeamNames));
+                } else {
+                    localStorage.removeItem('ar_flat_team_names');
+                }
+
                 renderRetro(retroData.rows, retroData.linkBase || linkBase);
                 renderDoc(docData.sections, docData.linkBase || linkBase);
                 $pptxBtn.hidden = false;
@@ -1736,8 +1822,9 @@
             topicPillTextColor: '0E2841'
         };
 
-        /* Show only Top-of-Mind immediately (before first Run). */
-        renderSlides([], { showPipelineWhenEmpty: false });
+        /* Show Top-of-Mind and Pipeline slides immediately (before first Run). */
+        var storedFlatTeams = flatView ? getStoredFlatTeamNames() : null;
+        renderSlides([], { showPipelineWhenEmpty: true, preloadFlatTeams: storedFlatTeams });
 
         /* ── Board startup: load from Cosmos and begin polling ─── */
         var debouncedTomSave = debounce(function(teamSlug, html) {
@@ -1770,6 +1857,25 @@
                     localStorage.setItem('ar_pipeline', JSON.stringify(pl));
                     refreshPipelineVisualization('ar_pipeline', pl);
                 } catch (e) { /* ignore */ }
+            }
+
+            /* Load per-team pipelines for flat-view pre-Run display */
+            var initFlatTeams = flatView ? getStoredFlatTeamNames() : null;
+            if (initFlatTeams && initFlatTeams.length > 0) {
+                for (var ti = 0; ti < initFlatTeams.length; ti++) {
+                    var ftName = initFlatTeams[ti];
+                    var ftKey = teamPipelineStorageKey(ftName);
+                    var ftSlug = storageKeyToTeamSlug(ftKey);
+                    var ftDoc = await boardGet('pipeline', ftSlug);
+                    if (ftDoc) {
+                        boardVersions['pipeline:' + ftSlug] = ftDoc.version;
+                        try {
+                            var ftPl = JSON.parse(ftDoc.content);
+                            localStorage.setItem(ftKey, JSON.stringify(ftPl));
+                            refreshPipelineVisualization(ftKey, ftPl);
+                        } catch (e) { /* ignore */ }
+                    }
+                }
             }
 
             startCollaborativePolling();

@@ -36,6 +36,7 @@ app.http('exportSlidesPpt', {
         baseTeamName: body.baseTeamName,
         deckFileName: body.deckFileName,
         linkBase: body.linkBase,
+        cycleNumber: body.cycleNumber,
         theme: body.theme
       });
 

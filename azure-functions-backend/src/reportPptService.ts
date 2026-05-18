@@ -45,6 +45,7 @@ export interface ReportPptTheme {
   topicPillRadius: number;
   topicPillTextColor: string;
   backgroundImageUrl: string;
+  titleImageUrl: string;
 }
 
 export interface GenerateReportPptInput {
@@ -57,6 +58,7 @@ export interface GenerateReportPptInput {
   baseTeamName?: string;
   deckFileName?: string;
   linkBase?: string;
+  cycleNumber?: string;
   theme?: Partial<ReportPptTheme>;
 }
 
@@ -85,7 +87,8 @@ const DEFAULT_THEME: ReportPptTheme = {
   topicPillBorderColor: '666666',
   topicPillRadius: 0.12,
   topicPillTextColor: '0E2841',
-  backgroundImageUrl: '../pptx_inspect/slideTemplate.png'
+  backgroundImageUrl: '../pptx_inspect/slideTemplate.png',
+  titleImageUrl: '../pptx_inspect/InitialSlideBackground.png'
 };
 
 function getTheme(theme?: Partial<ReportPptTheme>): ReportPptTheme {
@@ -506,6 +509,7 @@ function addPipelineLegend(
 export async function generateReportPpt(input: GenerateReportPptInput): Promise<Buffer> {
   const theme = getTheme(input.theme);
   const bgImageData = await toDataUrl(theme.backgroundImageUrl);
+  const titleImageData = await toDataUrl(theme.titleImageUrl);
   const pres = new PptxGenJS();
   pres.layout = 'LAYOUT_WIDE';
   pres.title = sanitizeFileName(input.deckFileName || 'anything-report');
@@ -515,9 +519,57 @@ export async function generateReportPpt(input: GenerateReportPptInput): Promise<
   const pipeline = input.pipeline || { rows: [] };
   const teamPipelines = input.teamPipelines || {};
   const baseTeamName = (input.baseTeamName || '').trim();
+  const deckFileName = sanitizeFileName(input.deckFileName || 'anything-report');
+  let cycleNumber = (input.cycleNumber || '').trim();
+  if (!cycleNumber) {
+    const firstWord = deckFileName.split(' ')[0];
+    if (/^\d+[A-Za-z]\d+$/.test(firstWord)) cycleNumber = firstWord;
+  }
+  const monthYear = new Date().toLocaleString('en-US', { month: 'long', year: 'numeric' });
   const topOfMindTitle = baseTeamName ? `Top of Mind - ${baseTeamName}` : 'Top of Mind';
   const pipelineBaseTitle = baseTeamName ? `Pipeline - ${baseTeamName}` : 'Pipeline';
   const linkBase = input.linkBase || 'https://microsoft.visualstudio.com/Edge/_workitems/edit/';
+
+  const PPT_X = 0.2;
+  const PPT_W = 13;
+  const TABLE_TOP_Y = 1.5;
+  const FEATURE_TABLE_TOP_Y = TABLE_TOP_Y - 0.5;
+  const TABLE_ROW_H = 0.5;
+  const plChartX = 0.2;
+  const plChartW = 12.93;
+  const plChartBottomY = 7.05;
+  const plTopicW = 3.4;
+  const plStageW = plChartW - plTopicW;
+  const plStageColW = plStageW / 6;
+  const plHeaders = ['INVESTIGATE', 'EXPLAINER /\nDESIGN DOC', 'IMPLEMENTATION', 'DEV TRIAL', 'ORIGIN TRIAL /\nCFR', 'SHIP'];
+
+  // Title slide (first slide)
+  const titleSlide = pres.addSlide();
+  if (titleImageData) {
+    titleSlide.addImage({ data: titleImageData, x: 0, y: 0, w: 13.333, h: 7.5 });
+  } else {
+    titleSlide.background = { color: theme.bgColor };
+  }
+  if (baseTeamName) {
+    titleSlide.addText(baseTeamName, {
+      x: 0.4, y: 5.0, w: 9, h: 0.82,
+      fontSize: 42, bold: true, color: 'FFFFFF',
+      fontFace: 'Segoe UI Semibold', valign: V_ALIGN_MID
+    });
+  }
+  titleSlide.addText('End of Cycle Review', {
+    x: 0.4, y: 5.8, w: 9, h: 0.65,
+    fontSize: 32, bold: true, color: 'FFFFFF',
+    fontFace: 'Segoe UI Semibold', valign: V_ALIGN_MID
+  });
+  const subtitleParts = ['Web Platform'];
+  if (cycleNumber) subtitleParts.push(cycleNumber);
+  if (monthYear) subtitleParts.push(monthYear);
+  titleSlide.addText(subtitleParts.join(' - '), {
+    x: 0.4, y: 6.42, w: 10, h: 0.45,
+    fontSize: 16, color: 'FFFFFF',
+    fontFace: 'Segoe UI', valign: V_ALIGN_MID
+  });
 
   const PPT_X = 0.2;
   const PPT_W = 13;

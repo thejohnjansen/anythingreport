@@ -24,7 +24,7 @@
             <div class="run-controls">
                 <button type="submit" id="runBtn">&#9654; Run</button>
             </div>
-            <label class="flat-view-label flat-view-under-run"><input type="checkbox" id="flatViewCheck"> Flat view?</label>
+            <label class="flat-view-label flat-view-under-run"><input type="checkbox" id="flatViewCheck"> Team View?</label>
             <button type="button" id="pptxBtn" hidden title="Download as PowerPoint">&#8595; PPTX</button>
         </form>
     </header>
@@ -114,6 +114,7 @@
         let baseSlideTitle = 'Layout';
         let baseTeamName = localStorage.getItem('ar_team_name') || '';
         let deckFileName = 'anything-report';
+        let cycleNumber = localStorage.getItem('ar_cycle_number') || '';
 
         const $deck    = document.getElementById('deck');
         const $nav     = document.getElementById('slideNav');
@@ -1718,6 +1719,8 @@
                 baseTeamName = slideData.baseTeamName || '';
                 if (baseTeamName) localStorage.setItem('ar_team_name', baseTeamName);
                 deckFileName = slideData.deckFileName || 'anything-report';
+                cycleNumber = slideData.cycleNumber || '';
+                if (cycleNumber) localStorage.setItem('ar_cycle_number', cycleNumber);
 
                 renderSlides(slideData.slides);
 
@@ -1788,7 +1791,8 @@
             getFlatView: function () { return flatView; },
             getBaseSlideTitle: function () { return baseSlideTitle; },
             getBaseTeamName: function () { return baseTeamName; },
-            getDeckFileName: function () { return deckFileName; }
+            getDeckFileName: function () { return deckFileName; },
+            getCycleNumber: function () { return cycleNumber; }
         };
 
         // Optional PPTX branding overrides consumed by pptx-export.js.

@@ -36,6 +36,7 @@ export interface SlidesPreviewResult {
   baseSlideTitle: string;
   baseTeamName: string;
   deckFileName: string;
+  cycleNumber: string;
 }
 
 function parseIterationLevel2Token(iterationPath: string | undefined): string {
@@ -121,6 +122,7 @@ function buildTitleContext(queryResult: WiqlTreeResult, workItemMap: Record<numb
       baseTeamName: '',
       flatSlideTitle: 'Layout',
       flatSlidePrefix: '',
+      cycleNumber: '',
       deckFileName: 'anything-report'
     };
   }
@@ -168,6 +170,7 @@ function buildTitleContext(queryResult: WiqlTreeResult, workItemMap: Record<numb
     baseTeamName: areaLevel3,
     flatSlideTitle,
     flatSlidePrefix: iterationToken || '',
+    cycleNumber: iterationLevel2NoHyphen,
     deckFileName
   };
 }
@@ -457,6 +460,7 @@ export async function getSlidesPreview(
     hasMidpoint: !!input.midpointDate,
     baseSlideTitle: titleContext.flatSlideTitle,
     baseTeamName: titleContext.baseTeamName,
-    deckFileName: titleContext.deckFileName
+    deckFileName: titleContext.deckFileName,
+    cycleNumber: titleContext.cycleNumber
   };
 }

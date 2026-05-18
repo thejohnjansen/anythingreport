@@ -308,7 +308,8 @@
             teamPipelines: state.loadTeamPipelines ? state.loadTeamPipelines() : {},
             baseSlideTitle: state.getBaseSlideTitle ? state.getBaseSlideTitle() : 'Layout',
             baseTeamName: state.getBaseTeamName ? state.getBaseTeamName() : '',
-            deckFileName: state.getDeckFileName ? state.getDeckFileName() : 'anything-report'
+            deckFileName: state.getDeckFileName ? state.getDeckFileName() : 'anything-report',
+            cycleNumber: state.getCycleNumber ? state.getCycleNumber() : ''
         };
     }
 
@@ -353,6 +354,7 @@
         var state = getState();
         var theme = getTheme();
         var bgImageData = await toDataUrl(theme.backgroundImageUrl);
+        var titleImageData = await toDataUrl('pptx_inspect/InitialSlideBackground.png');
         var hasMidpoint = state.hasMidpoint;
         var lastSlides = state.lastSlides;
         var PL_STAGES = state.PL_STAGES;
@@ -361,6 +363,14 @@
         var baseSlideTitle = state.baseSlideTitle || 'Layout';
         var baseTeamName = (state.baseTeamName || '').trim();
         var deckFileName = sanitizeFileName(state.deckFileName);
+        // Derive cycle from deckFileName (e.g. "26C2 - Rendering Check In" → "26C2")
+        // as a reliable fallback when cycleNumber hasn't been populated yet.
+        var cycleNumber = (state.cycleNumber || '').trim();
+        if (!cycleNumber) {
+            var firstWord = deckFileName.split(' ')[0];
+            if (/^\d+[A-Za-z]\d+$/.test(firstWord)) cycleNumber = firstWord;
+        }
+        var monthYear = new Date().toLocaleString('en-US', { month: 'long', year: 'numeric' });
         var topOfMindTitle = baseTeamName ? ('Top of Mind - ' + baseTeamName) : 'Top of Mind';
         var pipelineBaseTitle = baseTeamName ? ('Pipeline - ' + baseTeamName) : 'Pipeline';
 
@@ -372,6 +382,34 @@
         var FEATURE_TABLE_TOP_Y = TABLE_TOP_Y - 0.5;
         var TABLE_ROW_H = 0.5;
         var WORKITEM_LINK_BASE = 'https://microsoft.visualstudio.com/Edge/_workitems/edit/';
+
+        // Slide 0: Title slide
+        var titleSlide = pres.addSlide();
+        if (titleImageData) {
+            titleSlide.addImage({ data: titleImageData, x: 0, y: 0, w: 13.333, h: 7.5 });
+        } else {
+            titleSlide.background = { color: '0E2841' };
+        }
+        if (baseTeamName) {
+            titleSlide.addText(baseTeamName, {
+                x: 0.4, y: 5.0, w: 9, h: 0.82,
+                fontSize: 42, bold: true, color: 'FFFFFF',
+                fontFace: 'Segoe UI Semibold', valign: 'mid'
+            });
+        }
+        titleSlide.addText('End of Cycle Review', {
+            x: 0.4, y: 5.8, w: 9, h: 0.65,
+            fontSize: 32, bold: true, color: 'FFFFFF',
+            fontFace: 'Segoe UI Semibold', valign: 'mid'
+        });
+        var subtitleParts = ['Web Platform'];
+        if (cycleNumber) subtitleParts.push(cycleNumber);
+        if (monthYear) subtitleParts.push(monthYear);
+        titleSlide.addText(subtitleParts.join(' - '), {
+            x: 0.4, y: 6.42, w: 10, h: 0.45,
+            fontSize: 16, color: 'FFFFFF',
+            fontFace: 'Segoe UI', valign: 'mid'
+        });
 
         // Slide 1: Top of Mind
         var s1 = pres.addSlide();
@@ -1038,8 +1076,7 @@
 
         if (window.electronBridge && typeof window.electronBridge.savePptx === 'function') {
             var arrayBuffer = await pres.write('arraybuffer');
-            var result = await window.electronBridge.savePptx(arrayBuffer, deckFileName + '.pptx');
-            if (result && result.canceled) return; // user dismissed the dialog
+            await window.electronBridge.savePptx(arrayBuffer, deckFileName + '.pptx');
         } else {
             pres.writeFile({ fileName: deckFileName + '.pptx' });
         }

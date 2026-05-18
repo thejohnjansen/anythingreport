@@ -8,7 +8,7 @@ if (!process.env.AZURE_CLIENT_ID) {
     process.env.AZURE_CLIENT_ID = '04b07795-8ddb-461a-bbee-02f9e1bf7b46';
 }
 
-const { app, BrowserWindow, shell, Menu, ipcMain } = require('electron');
+const { app, BrowserWindow, shell, Menu, ipcMain, dialog } = require('electron');
 const path = require('path');
 const fs = require('fs');
 const { spawn } = require('child_process');
@@ -19,6 +19,16 @@ const { startTokenServer } = require('./tokenServer');
 const SERVER_PORT = process.env.PORT || 3456;
 let serverProcess = null;
 let mainWindow = null;
+
+/* ── Single-instance lock ── */
+const gotSingleInstanceLock = app.requestSingleInstanceLock();
+app.on('second-instance', () => {
+    // A second launch was attempted — bring the existing window to the front.
+    if (mainWindow) {
+        if (mainWindow.isMinimized()) mainWindow.restore();
+        mainWindow.focus();
+    }
+});
 
 // Set App User Model ID early so Windows taskbar uses the correct icon
 // from the very first frame, before any window is created.
@@ -185,6 +195,18 @@ function createWindow() {
 
 /* ── App lifecycle ── */
 app.whenReady().then(async () => {
+    if (!gotSingleInstanceLock) {
+        dialog.showMessageBoxSync({
+            type: 'info',
+            title: 'Anything Report is already running',
+            message: 'Anything Report is already open on this machine.',
+            detail: 'Check your taskbar — only one instance can run at a time.',
+            buttons: ['OK']
+        });
+        app.exit(0);
+        return;
+    }
+
     // Show splash immediately so users see something right away
     const splash = createSplashWindow();
     await new Promise((resolve) => splash.webContents.once('did-finish-load', resolve));

@@ -72,3 +72,7 @@ Then open **http://localhost:3456**, paste your ADO query URL, and click **Run**
 - **On Track** → green ✔
 - **At Risk** → orange ⚠
 - **Off Track** → red ✘
+
+### Open any bugs or feature requests in ADO
+- Area Path: Edge/Web Platform
+- Assigned to: John Jansen

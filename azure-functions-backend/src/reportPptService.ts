@@ -571,19 +571,6 @@ export async function generateReportPpt(input: GenerateReportPptInput): Promise<
     fontFace: 'Segoe UI', valign: V_ALIGN_MID
   });
 
-  const PPT_X = 0.2;
-  const PPT_W = 13;
-  const TABLE_TOP_Y = 1.5;
-  const FEATURE_TABLE_TOP_Y = TABLE_TOP_Y - 0.5;
-  const TABLE_ROW_H = 0.5;
-  const plChartX = 0.2;
-  const plChartW = 12.93;
-  const plChartBottomY = 7.05;
-  const plTopicW = 3.4;
-  const plStageW = plChartW - plTopicW;
-  const plStageColW = plStageW / 6;
-  const plHeaders = ['INVESTIGATE', 'EXPLAINER /\nDESIGN DOC', 'IMPLEMENTATION', 'DEV TRIAL', 'ORIGIN TRIAL /\nCFR', 'SHIP'];
-
   const topOfMindSlide = pres.addSlide();
   addSlideHeader(topOfMindSlide, topOfMindTitle, theme, bgImageData);
   const topOfMindRuns = htmlToPptRuns(input.topOfMindHtml || '');

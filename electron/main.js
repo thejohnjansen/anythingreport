@@ -20,11 +20,22 @@ if (process.platform === 'win32') {
     app.setAppUserModelId('ai.edgeinternal.anythingReport');
 }
 
-/* ── Start Express server as child process ── */
+/* ── Start Express server ── */
 function startServer(msalTokenPort) {
+    if (msalTokenPort) process.env.MSAL_TOKEN_PORT = String(msalTokenPort);
+
+    if (app.isPackaged) {
+        // In a packaged app, process.execPath is the Electron binary and cannot
+        // be used as a Node.js runtime to spawn arbitrary scripts. Run the server
+        // in-process instead — Express listens on the same port, waitForServer()
+        // polls until it is ready.
+        require('../server.js');
+        return;
+    }
+
+    // Development: spawn as a separate process for cleaner output separation.
     const serverPath = path.join(__dirname, '..', 'server.js');
     const env = { ...process.env };
-    if (msalTokenPort) env.MSAL_TOKEN_PORT = String(msalTokenPort);
     serverProcess = spawn(process.execPath, [serverPath], {
         cwd: path.join(__dirname, '..'),
         env,

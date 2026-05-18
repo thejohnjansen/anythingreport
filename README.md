@@ -2,6 +2,38 @@
 
 A lightweight, locally-run web app that turns an Azure DevOps query into a PowerPoint-style slide deck.
 
+## How to run this tool
+
+### To install locally (Windows)
+
+1. Browse to: [My Onedrive](https://onedrive.cloud.microsoft/:f:/a@668pm6kq/r/_layouts/15/onedrive.aspx?id=%2Fa%40668pm6kq%2FDocuments%2Fdist&share=cgqrp5PxfDkFRLlImaHqItmpEgUCKRl%5FPwW8QK88udS0%2DN%2DT1Q)
+2. Double-click **Anything Report Setup 1.0.0**
+3. Launch **Anything Report** from your desktop
+
+### Running reports
+
+1. Initially you will see **Top of Mind**
+2. Add rich text — it will automatically be saved to a Cosmos DB backend
+3. Paste in your team's ADO query URL — it should contain at least one Objective with *n* Epics under it, and *m* child Epics under those, e.g.:
+   ```
+   https://dev.azure.com/microsoft/Edge/_queries/query/c4e47939-b63c-4d6e-bcf4-811d15655294/
+   ```
+4. Click through to one of the **Pipeline** slides
+5. Hover a Topic and click **Edit** to update its contents — changes are saved automatically to the backend
+6. Click to create a **PPTX** of the content
+7. Verify everything looks correct and update as necessary
+
+### On a Mac
+
+```bash
+# Clone or pull the repo, then:
+npm install
+npm run dist:mac   # produces dist/Anything Report-1.0.0.dmg
+```
+
+> **Note:** macOS Gatekeeper may warn that the app is from an unidentified developer.
+> Right-click the `.dmg` → **Open** → **Open anyway** to proceed.
+
 ## Quick start
 
 ```bash

@@ -2,6 +2,12 @@
 
 require('dotenv').config({ path: require('path').join(__dirname, '..', '.env') });
 
+// Ensure MSAL auth is always active in the packaged app even without a .env file.
+// AZURE_CLIENT_ID is a public app registration identifier, not a secret.
+if (!process.env.AZURE_CLIENT_ID) {
+    process.env.AZURE_CLIENT_ID = '04b07795-8ddb-461a-bbee-02f9e1bf7b46';
+}
+
 const { app, BrowserWindow, shell, Menu, ipcMain } = require('electron');
 const path = require('path');
 const fs = require('fs');

@@ -1069,9 +1069,7 @@
 
                 var teamName = extractTeamNameFromSlideTitle(sd.title);
                 var teamPipeline = teamPipelines[teamName] || null;
-                if (!addPipelineDataSlides(teamName, teamPipeline)) {
-                    addPipelinePlaceholderSlide(teamName);
-                }
+                addPipelineDataSlides(teamName, teamPipeline);
             }
         }
 

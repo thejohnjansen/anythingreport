@@ -1078,8 +1078,7 @@
                     var teamName = extractTeamNameFromSlideTitle(slide.title);
                     createPipelineSlide({
                         storageKey: teamPipelineStorageKey(teamName),
-                        teamName: teamName,
-                        placeholderRows: 4
+                        teamName: teamName
                     });
                 }
             }
@@ -1088,8 +1087,7 @@
                 preloadFlatTeams.forEach(function(teamName) {
                     createPipelineSlide({
                         storageKey: teamPipelineStorageKey(teamName),
-                        teamName: teamName,
-                        placeholderRows: 4
+                        teamName: teamName
                     });
                 });
             }

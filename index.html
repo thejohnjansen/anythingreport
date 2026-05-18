@@ -245,6 +245,7 @@
                     var pl = JSON.parse(plDoc.content);
                     localStorage.setItem('ar_pipeline', JSON.stringify(pl));
                     refreshPipelineVisualization('ar_pipeline', pl);
+                    showBoardUpdateBadge('pipeline', plDoc.lastEditedBy, plDoc.lastEditedAt);
                 } catch (e) { /* ignore parse errors */ }
             }
         }

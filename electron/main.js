@@ -8,6 +8,12 @@ if (!process.env.AZURE_CLIENT_ID) {
     process.env.AZURE_CLIENT_ID = '04b07795-8ddb-461a-bbee-02f9e1bf7b46';
 }
 
+// Hardcode the shared Azure Functions URL so installed users without a .env
+// file can still read and write board data to Cosmos.
+if (!process.env.AZURE_FUNCTIONS_URL) {
+    process.env.AZURE_FUNCTIONS_URL = 'https://gray-hill-08e1f1a1e.7.azurestaticapps.net';
+}
+
 const { app, BrowserWindow, shell, Menu, ipcMain, dialog } = require('electron');
 const path = require('path');
 const fs = require('fs');

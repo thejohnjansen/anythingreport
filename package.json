@@ -34,7 +34,8 @@
       "pptx-export.js",
       "staticwebapp.config.json",
       "package.json",
-      "logo.png"
+      "logo.png",
+      "pptx_inspect/**/*"
     ],
     "directories": {
       "output": "dist"

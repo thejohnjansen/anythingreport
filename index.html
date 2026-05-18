@@ -220,10 +220,11 @@
         }
 
         async function pollBoardUpdates() {
+            var teamSlug = teamSlugFromName(baseTeamName);
+
             /* Poll Top of Mind */
-            var tomTeamSlug = (baseTeamName || '').trim().toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/(^-|-$)/g, '') || 'default';
-            var tomKey = 'topofmind:' + tomTeamSlug;
-            var tomDoc = await boardGet('topofmind', tomTeamSlug);
+            var tomKey = 'topofmind:' + teamSlug;
+            var tomDoc = await boardGet('topofmind', teamSlug);
             if (tomDoc && tomDoc.version > (boardVersions[tomKey] || 0)) {
                 boardVersions[tomKey] = tomDoc.version;
                 /* Only update if the user is not currently editing TOM */
@@ -235,10 +236,11 @@
                 }
             }
 
-            /* Poll default pipeline */
-            var plDoc = await boardGet('pipeline', 'default');
-            if (plDoc && plDoc.version > (boardVersions['pipeline:default'] || 0)) {
-                boardVersions['pipeline:default'] = plDoc.version;
+            /* Poll pipeline for current team */
+            var plKey = 'pipeline:' + teamSlug;
+            var plDoc = await boardGet('pipeline', teamSlug);
+            if (plDoc && plDoc.version > (boardVersions[plKey] || 0)) {
+                boardVersions[plKey] = plDoc.version;
                 try {
                     var pl = JSON.parse(plDoc.content);
                     localStorage.setItem('ar_pipeline', JSON.stringify(pl));

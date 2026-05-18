@@ -20,6 +20,9 @@ A lightweight, locally-run web app that turns an Azure DevOps query into a Power
    ```
 4. Click through to one of the **Pipeline** slides
 5. Hover a Topic and click **Edit** to update its contents — changes are saved automatically to the backend
+
+   > **NOTE:** If you and someone else are editing Top of Mind or Pipeline slides on the web site, you should see each other's updates in nearly real time.
+
 6. Click to create a **PPTX** of the content
 7. Verify everything looks correct and update as necessary
 

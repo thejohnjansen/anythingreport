@@ -5,5 +5,7 @@ azure-functions-backend/local.settings.json
 
 # Local dev / scratch files
 pptx_inspect/
+!pptx_inspect/InitialSlideBackground.png
+!pptx_inspect/slideTemplate.png
 *.pptx
 

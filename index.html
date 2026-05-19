@@ -236,17 +236,34 @@
                 }
             }
 
-            /* Poll pipeline for current team */
-            var plKey = 'pipeline:' + teamSlug;
-            var plDoc = await boardGet('pipeline', teamSlug);
-            if (plDoc && plDoc.version > (boardVersions[plKey] || 0)) {
-                boardVersions[plKey] = plDoc.version;
-                try {
-                    var pl = JSON.parse(plDoc.content);
-                    localStorage.setItem('ar_pipeline', JSON.stringify(pl));
-                    refreshPipelineVisualization('ar_pipeline', pl);
-                    showBoardUpdateBadge('pipeline', plDoc.lastEditedBy, plDoc.lastEditedAt);
-                } catch (e) { /* ignore parse errors */ }
+            /* Poll all visible pipeline slides: main pipeline + flat-team pipelines.
+               Each slide has its own Cosmos document and is merged at the row level
+               so an incoming server update to one slide cannot overwrite local edits
+               made to a different row or a different slide. */
+            var pipelinePollTargets = [{ storageKey: 'ar_pipeline', slug: teamSlug }];
+            var pollFlatTeams = flatView ? getStoredFlatTeamNames() : null;
+            if (pollFlatTeams) {
+                pollFlatTeams.forEach(function (teamName) {
+                    var sk = teamPipelineStorageKey(teamName);
+                    pipelinePollTargets.push({ storageKey: sk, slug: storageKeyToTeamSlug(sk) });
+                });
+            }
+
+            for (var pi = 0; pi < pipelinePollTargets.length; pi++) {
+                var target = pipelinePollTargets[pi];
+                var plKey = 'pipeline:' + target.slug;
+                var plDoc = await boardGet('pipeline', target.slug);
+                if (plDoc && plDoc.version > (boardVersions[plKey] || 0)) {
+                    boardVersions[plKey] = plDoc.version;
+                    try {
+                        var serverPl = JSON.parse(plDoc.content);
+                        var localPl = plLoad(target.storageKey);
+                        var mergedPl = localPl ? mergePipelineContent(localPl, serverPl) : serverPl;
+                        localStorage.setItem(target.storageKey, JSON.stringify(mergedPl));
+                        refreshPipelineVisualization(target.storageKey, mergedPl);
+                        showBoardUpdateBadge('pipeline', plDoc.lastEditedBy, plDoc.lastEditedAt);
+                    } catch (e) { /* ignore parse errors */ }
+                }
             }
         }
 
@@ -522,6 +539,7 @@
             var rows = [];
             for (var i = 0; i < rowCount; i++) {
                 rows.push({
+                    rowId: generateRowId(),
                     topic: '',
                     stages: ['', '', '', '', '', ''],
                     hereCol: -1,
@@ -543,12 +561,77 @@
                 return null;
             }
         }
-        function plSave(d, storageKey) {
+        function generateRowId() {
+            return Date.now().toString(36) + Math.random().toString(36).slice(2, 7);
+        }
+
+        /* Merges two pipeline objects at the row level using per-row lastEditedAt
+           timestamps so edits to different rows by different users are both preserved.
+           Rows are matched by stable rowId; rows without an id fall back to index order. */
+        function mergePipelineContent(localPl, serverPl) {
+            var serverRows = (serverPl && serverPl.rows) || [];
+            var localRows  = (localPl  && localPl.rows)  || [];
+
+            /* Build id-keyed maps for rows that have a stable rowId */
+            var serverById  = {};
+            var localById   = {};
+            var serverOrder = [];
+            serverRows.forEach(function (r) {
+                if (r.rowId) { serverById[r.rowId] = r; serverOrder.push(r.rowId); }
+            });
+            localRows.forEach(function (r) {
+                if (r.rowId) { localById[r.rowId] = r; }
+            });
+
+            /* Rows that exist locally but not yet on the server (recently added) */
+            var localOnlyIds = Object.keys(localById).filter(function (id) { return !serverById[id]; });
+
+            /* For each row known to the server, keep whichever copy was edited more recently */
+            var merged = serverOrder.map(function (id) {
+                var local  = localById[id];
+                var server = serverById[id];
+                if (!local) return server;
+                return (local.lastEditedAt || '') > (server.lastEditedAt || '') ? local : server;
+            });
+
+            /* Append rows added locally that haven't reached the server yet */
+            localOnlyIds.forEach(function (id) { merged.push(localById[id]); });
+
+            /* Legacy fallback: rows without rowId are merged by position */
+            var noIdServer = serverRows.filter(function (r) { return !r.rowId; });
+            var noIdLocal  = localRows.filter(function (r) { return !r.rowId; });
+            if (noIdServer.length || noIdLocal.length) {
+                var maxLen = Math.max(noIdServer.length, noIdLocal.length);
+                for (var i = 0; i < maxLen; i++) {
+                    var s = noIdServer[i];
+                    var l = noIdLocal[i];
+                    if (!s) { merged.push(l); continue; }
+                    if (!l) { merged.push(s); continue; }
+                    merged.push((l.lastEditedAt || '') > (s.lastEditedAt || '') ? l : s);
+                }
+            }
+
+            return Object.assign({}, serverPl, { rows: merged });
+        }
+
+        async function plSave(d, storageKey) {
             var key = storageKey || 'ar_pipeline';
             localStorage.setItem(key, JSON.stringify(d));
             var teamSlug = storageKeyToTeamSlug(key);
             var boardKey = 'pipeline:' + teamSlug;
-            boardPut('pipeline', teamSlug, JSON.stringify(d), boardVersions[boardKey]);
+            var result = await boardPut('pipeline', teamSlug, JSON.stringify(d), boardVersions[boardKey]);
+            if (result && result.conflict && result.currentDocument) {
+                /* Another user saved first — merge at the row level and retry once */
+                try {
+                    var serverPl = JSON.parse(result.currentDocument.content);
+                    var mergedPl = mergePipelineContent(d, serverPl);
+                    boardVersions[boardKey] = result.currentDocument.version;
+                    localStorage.setItem(key, JSON.stringify(mergedPl));
+                    await boardPut('pipeline', teamSlug, JSON.stringify(mergedPl), result.currentDocument.version);
+                } catch (e) {
+                    console.warn('plSave merge-retry failed:', e);
+                }
+            }
         }
 
         function normalizePipelineStageValue(value) {
@@ -657,8 +740,9 @@
 
             return fetchedRows.map(function (row) {
                 var existing = existingByTopic.get(plTopicKey(row.topic));
-                if (!existing) return row;
+                if (!existing) return Object.assign({ rowId: generateRowId() }, row);
                 return {
+                    rowId: existing.rowId || generateRowId(),
                     topic: row.topic,
                     stages: existing.stages || ['', '', '', '', '', ''],
                     hereCol: existing.hereCol ?? -1,
@@ -839,7 +923,16 @@
                     changedLabels[cl] = false;
                 }
             }
-            var newRow = { topic: topic, stages: stages, hereCol: hereCol, warnCol: warnCol, readonlyTopic: false, changedLabels: changedLabels };
+            var newRow = {
+                rowId: isAdding ? generateRowId() : ((prevRow && prevRow.rowId) || generateRowId()),
+                topic: topic,
+                stages: stages,
+                hereCol: hereCol,
+                warnCol: warnCol,
+                readonlyTopic: false,
+                changedLabels: changedLabels,
+                lastEditedAt: new Date().toISOString()
+            };
             if (!isAdding) {
                 newRow.readonlyTopic = !!((pl.rows[ctx.rowIndex] || {}).readonlyTopic);
                 pl.rows[ctx.rowIndex] = newRow;
